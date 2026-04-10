@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Bharat-P2P · Mesh Chat + Reply</title>
+<title>Bharat-P2P · Chaupal (Mesh + Identity)</title>
 
-<!-- PeerJS CDN (Zero-Backend WebRTC) -->
+<!-- PeerJS CDN (Zero‑Backend WebRTC) -->
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 
 <style>
   /* ──────────────────────────────────────────────
      DESIGN: "Kesari Minimalist" — saffron warmth,
-     ink-dark text, aged-paper surface, raw grid.
+     ink‑dark text, aged‑paper surface, raw grid.
      ────────────────────────────────────────────── */
   @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap');
 
@@ -327,6 +327,16 @@
     outline-offset: 2px;
   }
 
+  /* Sender name */
+  .msg-sender {
+    font-size: 0.7rem;
+    font-weight: 600;
+    margin-bottom: 2px;
+    opacity: 0.8;
+  }
+  .outgoing .msg-sender { color: #fff8e7; }
+  .incoming .msg-sender { color: var(--ink-soft); }
+
   /* Reply quote inside bubble */
   .reply-quote {
     background: rgba(0,0,0,0.06);
@@ -358,7 +368,7 @@
     color: #999;
   }
 
-  .reply-btn {
+  .reply-btn, .edit-btn {
     background: none;
     border: none;
     font-size: 1rem;
@@ -367,7 +377,7 @@
     opacity: 0.7;
     transition: opacity 0.2s;
   }
-  .reply-btn:hover { opacity: 1; }
+  .reply-btn:hover, .edit-btn:hover { opacity: 1; }
 
   .save-btn {
     font-family: var(--mono);
@@ -471,7 +481,6 @@
     padding: 0;
   }
 
-  /* Peer count badge */
   #peer-count-badge {
     font-family: var(--mono);
     font-size: 0.7rem;
@@ -482,7 +491,7 @@
     white-space: nowrap;
   }
 
-  /* ── TOAST NOTIFICATION ── */
+  /* ── TOAST ── */
   #toast {
     position: fixed;
     bottom: 80px;
@@ -506,7 +515,7 @@
     transform: translateX(-50%) translateY(0);
   }
 
-  /* ── MODAL (Invite Link) ── */
+  /* ── MODAL (Invite) ── */
   #modal-overlay {
     display: none;
     position: fixed;
@@ -565,7 +574,36 @@
     flex-wrap: wrap;
   }
 
-  /* ── RESPONSIVE ── */
+  /* ── NAME PROMPT (simple) ── */
+  #name-prompt-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    backdrop-filter: blur(4px);
+  }
+  #name-prompt {
+    background: var(--paper);
+    padding: 24px;
+    border-radius: 20px;
+    border: 2px solid var(--saffron);
+    max-width: 340px;
+    width: 90%;
+    text-align: center;
+  }
+  #name-prompt h3 { margin-bottom: 16px; color: var(--ink); }
+  #display-name-input {
+    width: 100%;
+    padding: 12px;
+    font-size: 1rem;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 16px;
+  }
+
   @media (max-width: 480px) {
     header { padding: 12px 14px 10px; }
     #connect-bar { padding: 10px 12px; }
@@ -597,19 +635,12 @@
 
   <!-- ── CONNECT BAR ── -->
   <div id="connect-bar">
-    <input
-      id="remote-id-input"
-      type="text"
-      placeholder="Paste friend's Peer ID…"
-      autocomplete="off"
-      autocapitalize="off"
-      spellcheck="false"
-    />
+    <input id="remote-id-input" type="text" placeholder="Paste friend's Peer ID…" autocomplete="off" autocapitalize="off" spellcheck="false" />
     <button class="btn btn-primary" onclick="connectToPeer()">Connect</button>
     <button class="btn btn-dark" id="invite-btn" onclick="openInviteModal()">🔗 Invite</button>
   </div>
 
-  <!-- ── REPLY PREVIEW (hidden by default) ── -->
+  <!-- ── REPLY PREVIEW ── -->
   <div id="reply-preview">
     <div class="reply-preview-content" id="reply-preview-text">Replying to ...</div>
     <button class="reply-cancel" onclick="cancelReply()">&times;</button>
@@ -625,14 +656,7 @@
 
   <!-- ── FOOTER INPUT ── -->
   <footer>
-    <textarea
-      id="msg-input"
-      placeholder="Type a message… (Enter to send)"
-      rows="1"
-      disabled
-      oninput="autoResize(this)"
-      onkeydown="handleKey(event)"
-    ></textarea>
+    <textarea id="msg-input" placeholder="Type a message… (Enter to send)" rows="1" disabled oninput="autoResize(this)" onkeydown="handleKey(event)"></textarea>
     <button class="btn btn-primary" id="send-btn" onclick="sendMessage()" title="Send">➤</button>
   </footer>
 </div>
@@ -653,23 +677,45 @@
   </div>
 </div>
 
+<!-- Simple name prompt (shown only if no name) -->
+<div id="name-prompt-overlay" style="display: none;">
+  <div id="name-prompt">
+    <h3>👤 Your Display Name</h3>
+    <input type="text" id="display-name-input" placeholder="e.g., Kesari" maxlength="20" autocomplete="off" />
+    <button class="btn btn-primary" style="width:100%;" onclick="saveDisplayName()">Continue</button>
+  </div>
+</div>
+
 <script>
-/* ════════════════════════════════════════════════
-   BHARAT-P2P — Mesh P2P Chat + Reply
-   No server. No analytics. No cookies. Just Peers.
-   ════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   BHARAT‑P2P · CHAUPAL — Mesh P2P with Identity, Auto‑Reconnect,
+   Heartbeat, Message Forwarding & Editing. 100% P2P, no server.
+   ═══════════════════════════════════════════════════════════════ */
 
-const STORAGE_KEY  = 'bharatp2p_messages';
-const MAX_AGE_MS   = 24 * 60 * 60 * 1000; // 24 hours
+const STORAGE_KEY     = 'bharatp2p_messages';
+const PEER_ID_KEY     = 'bharat_peer_id';
+const DISPLAY_NAME_KEY= 'bharat_display_name';
+const MAX_AGE_MS      = 24 * 60 * 60 * 1000;  // 24h
+const HEARTBEAT_INTERVAL = 15000;             // 15 sec
+const RECONNECT_DELAY    = 3000;              // 3 sec
 
-let peer       = null;          // Our PeerJS instance
-let connections = [];           // Array of active DataConnections (mesh)
-let myId       = null;          // Our Peer ID
+// Global state
+let peer          = null;
+let connections   = [];                // Array of active Peer connections
+let myId          = null;
+let displayName   = '';
 
-// Reply feature
-let replyingTo = null;          // { id, text, direction }
+// Reply state
+let replyingTo    = null;              // { id, text, direction }
 
-/* ── DOM refs ── */
+// Message deduplication (prevent forwarding loops)
+const seenMessageIds = new Set();
+const MAX_SEEN_IDS   = 200;
+
+// Pending reconnects
+const reconnectAttempts = new Map();   // peerId -> { count, timer }
+
+// DOM refs
 const $status      = document.getElementById('status-badge');
 const $peerCount   = document.getElementById('peer-count-badge');
 const $myPeerId    = document.getElementById('my-peer-id');
@@ -677,49 +723,73 @@ const $remoteIn    = document.getElementById('remote-id-input');
 const $msgInput    = document.getElementById('msg-input');
 const $messages    = document.getElementById('messages');
 const $emptyState  = document.getElementById('empty-state');
-const $replyPreview = document.getElementById('reply-preview');
+const $replyPreview= document.getElementById('reply-preview');
 const $replyText   = document.getElementById('reply-preview-text');
 
-/* ══════════════════════════════════════════
-   1. INITIALISE PEER
-   ══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   0. IDENTITY SETUP (persistent Peer ID + Display Name)
+   ═══════════════════════════════════════════════════════════════ */
+function ensureDisplayName() {
+  const saved = localStorage.getItem(DISPLAY_NAME_KEY);
+  if (saved) {
+    displayName = saved;
+    return true;
+  }
+  // Show prompt
+  document.getElementById('name-prompt-overlay').style.display = 'flex';
+  document.getElementById('display-name-input').focus();
+  return false;
+}
+
+window.saveDisplayName = function() {
+  const input = document.getElementById('display-name-input');
+  const name = input.value.trim();
+  if (!name) {
+    showToast('Please enter a name');
+    return;
+  }
+  displayName = name;
+  localStorage.setItem(DISPLAY_NAME_KEY, name);
+  document.getElementById('name-prompt-overlay').style.display = 'none';
+  // Now we can initialize Peer
+  initPeer();
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   1. INITIALISE PEER (with persistent ID)
+   ═══════════════════════════════════════════════════════════════ */
 function initPeer() {
   setStatus('loading', 'Generating ID…');
 
-  peer = new Peer(undefined, {
+  const savedPeerId = localStorage.getItem(PEER_ID_KEY);
+  const options = {
     debug: 0,
-    config: {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-      ]
-    }
-  });
+    config: { iceServers: [ { urls: 'stun:stun.l.google.com:19302' } ] }
+  };
+  if (savedPeerId) options.id = savedPeerId;
+
+  peer = new Peer(options);
 
   peer.on('open', (id) => {
     myId = id;
+    if (!savedPeerId) localStorage.setItem(PEER_ID_KEY, id);
     $myPeerId.textContent = id;
     setStatus('waiting', 'Waiting for Peer…');
     updatePeerCount();
 
     const hash = window.location.hash.slice(1).trim();
-    if (hash && hash !== id) {
-      autoConnectFromHash(hash);
-    }
+    if (hash && hash !== id) autoConnectFromHash(hash);
   });
 
   peer.on('connection', (incomingConn) => {
     setupConnection(incomingConn);
-    addSysMsg(`Peer connected: ${incomingConn.peer.slice(0,8)}…`);
+    addSysMsg(`📡 Peer joined: ${incomingConn.peer.slice(0,8)}…`);
   });
 
   peer.on('error', (err) => {
     console.error('PeerJS error:', err);
-    const msg = err.type === 'peer-unavailable'
-      ? 'Peer not found. Check the ID.'
-      : err.type === 'unavailable-id'
-      ? 'ID conflict. Refresh to get a new one.'
-      : 'Connection error. Try again.';
+    const msg = err.type === 'peer-unavailable' ? 'Peer not found'
+              : err.type === 'unavailable-id' ? 'ID conflict' : 'Connection error';
     setStatus('error', '✕ Error');
     showToast('⚠️ ' + msg);
   });
@@ -730,155 +800,298 @@ function initPeer() {
   });
 }
 
-/* ══════════════════════════════════════════
-   2. AUTO-CONNECT FROM URL HASH
-   ══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   2. AUTO‑CONNECT FROM URL HASH
+   ═══════════════════════════════════════════════════════════════ */
 function autoConnectFromHash(remoteId) {
-  addSysMsg(`Auto-connecting to ${remoteId.slice(0,8)}…`);
+  addSysMsg(`Auto‑connecting to ${remoteId.slice(0,8)}…`);
   setStatus('connecting', '⟳ Connecting…');
   $remoteIn.value = remoteId;
-
   setTimeout(() => {
-    const c = peer.connect(remoteId, {
-      reliable: true,
-      metadata: { via: 'invite-link' }
-    });
+    const c = peer.connect(remoteId, { reliable: true, metadata: { via: 'invite' } });
     setupConnection(c);
   }, 400);
 }
 
-/* ══════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    3. MANUAL CONNECT
-   ══════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════════ */
 function connectToPeer() {
   const remoteId = $remoteIn.value.trim();
   if (!remoteId) { showToast('Enter a Peer ID first.'); return; }
-  if (!peer || !myId) { showToast('Still initialising, please wait…'); return; }
+  if (!peer || !myId) { showToast('Still initialising…'); return; }
   if (remoteId === myId) { showToast("That's your own ID!"); return; }
 
   setStatus('connecting', '⟳ Connecting…');
   addSysMsg(`Connecting to ${remoteId.slice(0,8)}…`);
-
   const c = peer.connect(remoteId, { reliable: true });
   setupConnection(c);
 }
 
-/* ══════════════════════════════════════════
-   4. SETUP DATA CONNECTION (MULTI-PEER)
-   ══════════════════════════════════════════ */
-function setupConnection(c) {
-  // Avoid duplicates (same peer id)
-  if (connections.some(conn => conn.peer === c.peer)) {
-    console.warn('Already connected to', c.peer);
+/* ═══════════════════════════════════════════════════════════════
+   4. SETUP DATA CONNECTION (with heartbeat & reconnect logic)
+   ═══════════════════════════════════════════════════════════════ */
+function setupConnection(conn) {
+  if (connections.some(c => c.peer === conn.peer)) {
+    console.warn('Already connected to', conn.peer);
     return;
   }
 
-  connections.push(c);
+  connections.push(conn);
   updatePeerCount();
 
-  c.on('open', () => {
+  // Heartbeat interval
+  const heartbeatTimer = setInterval(() => {
+    if (conn.open) {
+      conn.send({ type: 'heartbeat', ts: Date.now() });
+    }
+  }, HEARTBEAT_INTERVAL);
+
+  conn.heartbeatTimer = heartbeatTimer;
+
+  conn.on('open', () => {
     setStatus('connected', '● Connected!');
     $msgInput.disabled = false;
     $msgInput.focus();
-    addSysMsg(`🔒 Secure channel with ${c.peer.slice(0,8)}…`);
+    addSysMsg(`🔒 Secure channel with ${conn.peer.slice(0,8)}…`);
     updatePeerCount();
+    // Clear reconnect attempts for this peer
+    reconnectAttempts.delete(conn.peer);
   });
 
-  c.on('data', (data) => {
-    if (typeof data === 'object' && data.type === 'chat') {
-      receiveMessage(data);
+  conn.on('data', (data) => {
+    if (data.type === 'chat') {
+      receiveMessage(data, conn);
+    } else if (data.type === 'edit') {
+      handleEditMessage(data);
+    } else if (data.type === 'heartbeat') {
+      // keep alive, nothing else
     }
   });
 
-  c.on('close', () => {
-    connections = connections.filter(conn => conn !== c);
-    updatePeerCount();
-    addSysMsg(`Peer ${c.peer.slice(0,8)} disconnected.`);
-    if (connections.length === 0) {
-      setStatus('waiting', 'Waiting for Peer…');
-      $msgInput.disabled = true;
-    }
+  conn.on('close', () => {
+    handleConnectionClose(conn);
   });
 
-  c.on('error', (err) => {
-    setStatus('error', '✕ Error');
-    showToast('Connection lost.');
-    console.error(err);
+  conn.on('error', (err) => {
+    console.warn('Connection error', err);
+    handleConnectionClose(conn);
   });
+}
+
+function handleConnectionClose(conn) {
+  clearInterval(conn.heartbeatTimer);
+  connections = connections.filter(c => c !== conn);
+
+  const peerId = conn.peer;
+  updatePeerCount();
+  addSysMsg(`⚠️ Peer ${peerId.slice(0,8)} disconnected.`);
+
+  if (connections.length === 0) {
+    setStatus('waiting', 'Waiting for Peer…');
+    $msgInput.disabled = true;
+  }
+
+  // Schedule reconnect unless we already have an open connection to that peer
+  if (!connections.some(c => c.peer === peerId && c.open)) {
+    scheduleReconnect(peerId);
+  }
+}
+
+function scheduleReconnect(peerId) {
+  if (reconnectAttempts.has(peerId)) {
+    const entry = reconnectAttempts.get(peerId);
+    if (entry.count >= 5) {
+      addSysMsg(`❌ Giving up reconnect to ${peerId.slice(0,8)}`);
+      reconnectAttempts.delete(peerId);
+      return;
+    }
+    entry.count++;
+  } else {
+    reconnectAttempts.set(peerId, { count: 1 });
+  }
+
+  addSysMsg(`🔄 Reconnecting to ${peerId.slice(0,8)} in 3s…`);
+  const timer = setTimeout(() => {
+    if (!peer || peer.destroyed) return;
+    // Check if already connected
+    if (connections.some(c => c.peer === peerId && c.open)) {
+      reconnectAttempts.delete(peerId);
+      return;
+    }
+    const c = peer.connect(peerId, { reliable: true });
+    setupConnection(c);
+    reconnectAttempts.delete(peerId);
+  }, RECONNECT_DELAY);
+
+  const entry = reconnectAttempts.get(peerId);
+  if (entry) entry.timer = timer;
 }
 
 function updatePeerCount() {
-  const count = connections.filter(c => c.open).length;
-  $peerCount.textContent = `👥 ${count} peer${count !== 1 ? 's' : ''}`;
+  const openCount = connections.filter(c => c.open).length;
+  $peerCount.textContent = `👥 ${openCount} peer${openCount !== 1 ? 's' : ''}`;
 }
 
-/* ══════════════════════════════════════════
-   5. SEND MESSAGE (with reply support)
-   ══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   5. SEND MESSAGE (with reply, edit support)
+   ═══════════════════════════════════════════════════════════════ */
+let editingMessageId = null;  // if we're editing an existing message
+
 function sendMessage() {
   const text = $msgInput.value.trim();
   if (!text) return;
+
+  // If editing an existing message
+  if (editingMessageId) {
+    finalizeEdit(editingMessageId, text);
+    return;
+  }
+
   if (connections.filter(c => c.open).length === 0) {
     showToast('Not connected to any peer.');
     return;
   }
 
   const msgObj = {
-    type:      'chat',
-    id:        crypto.randomUUID(),
-    text:      text,
-    timestamp: Date.now(),
-    direction: 'outgoing',
-    permanent: false,
+    type:       'chat',
+    id:         crypto.randomUUID(),
+    text:       text,
+    timestamp:  Date.now(),
+    direction:  'outgoing',
+    permanent:  false,
+    senderId:   myId,
+    senderName: displayName,
+    replyTo:    replyingTo ? { id: replyingTo.id, text: replyingTo.text, direction: replyingTo.direction } : null
   };
 
-  // Attach reply if any
-  if (replyingTo) {
-    msgObj.replyTo = {
-      id: replyingTo.id,
-      text: replyingTo.text,
-      direction: replyingTo.direction
-    };
-  }
+  // Send to all open connections
+  connections.forEach(conn => { if (conn.open) conn.send(msgObj); });
 
-  // Send to all open connections (mesh)
-  connections.forEach(conn => {
-    if (conn.open) conn.send(msgObj);
-  });
-
+  // Also save locally
   saveMessage(msgObj);
   renderMessage(msgObj);
 
   $msgInput.value = '';
   autoResize($msgInput);
   scrollToBottom();
-
-  // Clear reply state
   cancelReply();
+
+  // Mark as seen to avoid forwarding loops
+  seenMessageIds.add(msgObj.id);
+  if (seenMessageIds.size > MAX_SEEN_IDS) {
+    const iter = seenMessageIds.values();
+    for (let i=0; i<50; i++) seenMessageIds.delete(iter.next().value);
+  }
 }
 
-/* ══════════════════════════════════════════
-   6. RECEIVE MESSAGE
-   ══════════════════════════════════════════ */
-function receiveMessage(data) {
+/* ═══════════════════════════════════════════════════════════════
+   6. RECEIVE MESSAGE (with forwarding)
+   ═══════════════════════════════════════════════════════════════ */
+function receiveMessage(data, sourceConn) {
+  // Deduplicate
+  if (seenMessageIds.has(data.id)) return;
+  seenMessageIds.add(data.id);
+  if (seenMessageIds.size > MAX_SEEN_IDS) {
+    const iter = seenMessageIds.values();
+    for (let i=0; i<50; i++) seenMessageIds.delete(iter.next().value);
+  }
+
   const msgObj = {
-    type:      'chat',
-    id:        data.id || crypto.randomUUID(),
-    text:      data.text,
-    timestamp: data.timestamp || Date.now(),
-    direction: 'incoming',
-    permanent: false,
-    replyTo:   data.replyTo || null
+    ...data,
+    direction: 'incoming'
   };
 
   saveMessage(msgObj);
   renderMessage(msgObj);
   scrollToBottom();
+
+  // Forward to all other connected peers (mesh broadcast)
+  connections.forEach(conn => {
+    if (conn !== sourceConn && conn.open) {
+      conn.send(data);
+    }
+  });
 }
 
-/* ══════════════════════════════════════════
-   7. RENDER MESSAGE BUBBLE (with reply quote)
-   ══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   7. MESSAGE EDITING
+   ═══════════════════════════════════════════════════════════════ */
+function startEdit(msgId) {
+  const messages = loadMessages();
+  const msg = messages.find(m => m.id === msgId);
+  if (!msg || msg.direction !== 'outgoing') return;
+
+  editingMessageId = msgId;
+  $msgInput.value = msg.text;
+  $msgInput.focus();
+  autoResize($msgInput);
+  showToast('✏️ Edit your message and press Enter');
+}
+
+function finalizeEdit(msgId, newText) {
+  if (!newText.trim()) {
+    cancelEdit();
+    return;
+  }
+
+  const messages = loadMessages();
+  const idx = messages.findIndex(m => m.id === msgId);
+  if (idx === -1) return;
+
+  messages[idx].text = newText;
+  messages[idx].edited = true;
+  persistMessages(messages);
+
+  // Update UI
+  const bubble = document.querySelector(`.msg-wrapper[data-msg-id="${msgId}"] .bubble`);
+  if (bubble) {
+    // Rebuild content: keep reply quote if present, update main text
+    const msg = messages[idx];
+    const quoteHtml = msg.replyTo ? `<div class="reply-quote">↩️ ${escapeHTML(msg.replyTo.text)}</div>` : '';
+    bubble.innerHTML = quoteHtml + escapeHTML(msg.text) + (msg.edited ? ' <span style="opacity:0.7; font-size:0.7rem;">(edited)</span>' : '');
+  }
+
+  // Broadcast edit to all peers
+  const editPacket = {
+    type: 'edit',
+    messageId: msgId,
+    newText: newText,
+    senderId: myId
+  };
+  connections.forEach(conn => { if (conn.open) conn.send(editPacket); });
+
+  cancelEdit();
+  showToast('✅ Message updated');
+}
+
+function handleEditMessage(packet) {
+  const { messageId, newText } = packet;
+  const messages = loadMessages();
+  const idx = messages.findIndex(m => m.id === messageId);
+  if (idx === -1) return;
+
+  messages[idx].text = newText;
+  messages[idx].edited = true;
+  persistMessages(messages);
+
+  const bubble = document.querySelector(`.msg-wrapper[data-msg-id="${messageId}"] .bubble`);
+  if (bubble) {
+    const msg = messages[idx];
+    const quoteHtml = msg.replyTo ? `<div class="reply-quote">↩️ ${escapeHTML(msg.replyTo.text)}</div>` : '';
+    bubble.innerHTML = quoteHtml + escapeHTML(msg.text) + ' <span style="opacity:0.7; font-size:0.7rem;">(edited)</span>';
+  }
+}
+
+function cancelEdit() {
+  editingMessageId = null;
+  $msgInput.value = '';
+  autoResize($msgInput);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   8. RENDER MESSAGE (with sender name, edit button)
+   ═══════════════════════════════════════════════════════════════ */
 function renderMessage(msg) {
   $emptyState.style.display = 'none';
 
@@ -888,22 +1101,30 @@ function renderMessage(msg) {
 
   const timeStr = formatTime(msg.timestamp);
   const isPerm  = msg.permanent;
+  const isOwn   = msg.direction === 'outgoing' || msg.senderId === myId;
 
-  // Build quoted part if reply exists
+  // Sender name display (only for incoming, or we can show for all)
+  const senderDisplay = (msg.direction === 'incoming' && msg.senderName) 
+    ? `<div class="msg-sender">${escapeHTML(msg.senderName)}</div>` 
+    : (msg.direction === 'outgoing' ? `<div class="msg-sender">You</div>` : '');
+
   let quoteHtml = '';
   if (msg.replyTo) {
-    const replyText = escapeHTML(msg.replyTo.text || '');
-    quoteHtml = `<div class="reply-quote">↩️ ${replyText}</div>`;
+    quoteHtml = `<div class="reply-quote">↩️ ${escapeHTML(msg.replyTo.text || '')}</div>`;
   }
+
+  const editedMark = msg.edited ? ' <span style="opacity:0.7; font-size:0.7rem;">(edited)</span>' : '';
 
   wrapper.innerHTML = `
     <div class="bubble ${isPerm ? 'permanent' : ''}" id="bubble-${msg.id}">
+      ${senderDisplay}
       ${quoteHtml}
-      ${escapeHTML(msg.text)}
+      ${escapeHTML(msg.text)}${editedMark}
     </div>
     <div class="msg-footer">
       <span class="msg-time">${timeStr}</span>
       <button class="reply-btn" onclick="replyToMessage('${msg.id}')" title="Reply">↩️</button>
+      ${isOwn ? `<button class="edit-btn" onclick="startEdit('${msg.id}')" title="Edit">✏️</button>` : ''}
       ${isPerm
         ? `<span class="permanent-badge">📌 Saved</span>`
         : `<button class="save-btn" id="savebtn-${msg.id}" onclick="saveForever('${msg.id}')">Save</button>`
@@ -914,20 +1135,15 @@ function renderMessage(msg) {
   $messages.appendChild(wrapper);
 }
 
-/* ══════════════════════════════════════════
-   8. REPLY FEATURE
-   ══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   9. REPLY FEATURE
+   ═══════════════════════════════════════════════════════════════ */
 function replyToMessage(msgId) {
   const messages = loadMessages();
   const msg = messages.find(m => m.id === msgId);
   if (!msg) return;
 
-  replyingTo = {
-    id: msg.id,
-    text: msg.text,
-    direction: msg.direction
-  };
-
+  replyingTo = { id: msg.id, text: msg.text, direction: msg.direction };
   const preview = (msg.text.length > 50) ? msg.text.slice(0,50)+'…' : msg.text;
   $replyText.textContent = `↩️ Replying to: ${preview}`;
   $replyPreview.classList.add('active');
@@ -940,80 +1156,58 @@ function cancelReply() {
   $replyText.textContent = '';
 }
 
-/* ══════════════════════════════════════════
-   9. SAVE FOREVER (Mark as Permanent)
-   ══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   10. SAVE FOREVER (Permanent)
+   ═══════════════════════════════════════════════════════════════ */
 function saveForever(msgId) {
   const messages = loadMessages();
   const idx = messages.findIndex(m => m.id === msgId);
   if (idx === -1) return;
-
   messages[idx].permanent = true;
   persistMessages(messages);
 
   const bubble = document.getElementById(`bubble-${msgId}`);
   const saveBtn = document.getElementById(`savebtn-${msgId}`);
   if (bubble) bubble.classList.add('permanent');
-  if (saveBtn) {
-    saveBtn.outerHTML = `<span class="permanent-badge">📌 Saved</span>`;
-  }
-
+  if (saveBtn) saveBtn.outerHTML = `<span class="permanent-badge">📌 Saved</span>`;
   showToast('💾 Message saved permanently!');
 }
 
-/* ══════════════════════════════════════════
-   10. LOCALSTORAGE — CRUD
-   ══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   11. LOCALSTORAGE CRUD
+   ═══════════════════════════════════════════════════════════════ */
 function loadMessages() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-  } catch { return []; }
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+  catch { return []; }
 }
-
 function persistMessages(msgs) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(msgs));
-  } catch(e) {
-    console.warn('localStorage full?', e);
-  }
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(msgs)); }
+  catch(e) { console.warn('storage full', e); }
 }
-
 function saveMessage(msg) {
-  const messages = loadMessages();
-  messages.push(msg);
-  persistMessages(messages);
+  const msgs = loadMessages();
+  msgs.push(msg);
+  persistMessages(msgs);
 }
-
-/* ══════════════════════════════════════════
-   11. AUTO-DELETE: Remove messages > 24h
-       (unless marked permanent)
-   ══════════════════════════════════════════ */
 function pruneOldMessages() {
-  const messages = loadMessages();
+  const msgs = loadMessages();
   const now = Date.now();
-  const kept = messages.filter(m => m.permanent || (now - m.timestamp) < MAX_AGE_MS);
-  const removed = messages.length - kept.length;
+  const kept = msgs.filter(m => m.permanent || (now - m.timestamp) < MAX_AGE_MS);
   persistMessages(kept);
-  if (removed > 0) console.log(`[Bharat-P2P] Auto-deleted ${removed} old message(s).`);
   return kept;
 }
-
-/* ══════════════════════════════════════════
-   12. LOAD & RENDER PERSISTED MESSAGES
-   ══════════════════════════════════════════ */
 function loadAndRenderHistory() {
-  const messages = pruneOldMessages();
-  if (messages.length === 0) return;
-
+  const msgs = pruneOldMessages();
+  if (msgs.length === 0) return;
   $emptyState.style.display = 'none';
   addSysMsg('— Previous messages (last 24h) —');
-  messages.forEach(msg => renderMessage(msg));
+  msgs.forEach(m => renderMessage(m));
   scrollToBottom();
 }
 
-/* ══════════════════════════════════════════
-   13. SYSTEM MESSAGE (non-chat info line)
-   ══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   12. UTILITIES
+   ═══════════════════════════════════════════════════════════════ */
 function addSysMsg(text) {
   const el = document.createElement('div');
   el.className = 'sys-msg';
@@ -1021,110 +1215,74 @@ function addSysMsg(text) {
   $messages.appendChild(el);
   scrollToBottom();
 }
-
-/* ══════════════════════════════════════════
-   14. INVITE LINK MODAL
-   ══════════════════════════════════════════ */
-function openInviteModal() {
-  if (!myId) { showToast('Still generating your ID…'); return; }
-  const base  = window.location.origin + window.location.pathname;
-  const link  = `${base}#${myId}`;
-  document.getElementById('invite-link-box').textContent = link;
-  document.getElementById('modal-overlay').classList.add('active');
-}
-
-function copyInviteLink() {
-  const link = document.getElementById('invite-link-box').textContent;
-  navigator.clipboard.writeText(link).then(() => {
-    showToast('✅ Invite link copied!');
-    closeModalDirect();
-  }).catch(() => {
-    showToast('Could not copy. Select & copy manually.');
-  });
-}
-
-function closeModal(e) {
-  if (e.target.id === 'modal-overlay') closeModalDirect();
-}
-function closeModalDirect() {
-  document.getElementById('modal-overlay').classList.remove('active');
-}
-
-/* ══════════════════════════════════════════
-   15. COPY MY ID
-   ══════════════════════════════════════════ */
-function copyMyId() {
-  if (!myId) return;
-  navigator.clipboard.writeText(myId).then(() => {
-    showToast('📋 Your Peer ID copied!');
-  }).catch(() => showToast('Copy failed.'));
-}
-
-/* ══════════════════════════════════════════
-   16. UTILITY FUNCTIONS
-   ══════════════════════════════════════════ */
 function setStatus(type, text) {
   $status.textContent = text;
   $status.className = `status--${type}`;
 }
-
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2800);
 }
-
-function scrollToBottom() {
-  $messages.scrollTop = $messages.scrollHeight;
-}
-
+function scrollToBottom() { $messages.scrollTop = $messages.scrollHeight; }
 function formatTime(ts) {
   const d = new Date(ts);
   const today = new Date();
   const isToday = d.toDateString() === today.toDateString();
-  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (isToday) return time;
-  return `${d.getDate()}/${d.getMonth()+1} ${time}`;
+  const time = d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+  return isToday ? time : `${d.getDate()}/${d.getMonth()+1} ${time}`;
 }
-
-function escapeHTML(str) {
-  return str
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;')
-    .replace(/\n/g,'<br/>');
+function escapeHTML(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/\n/g,'<br/>');
 }
-
 function autoResize(el) {
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight, 120) + 'px';
 }
-
 function handleKey(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
-    sendMessage();
+    if (editingMessageId) finalizeEdit(editingMessageId, $msgInput.value.trim());
+    else sendMessage();
   }
 }
 
-/* ══════════════════════════════════════════
+/* ── Invite & Copy ── */
+function openInviteModal() {
+  if (!myId) { showToast('Still generating ID…'); return; }
+  const base = location.origin + location.pathname;
+  document.getElementById('invite-link-box').textContent = `${base}#${myId}`;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+function copyInviteLink() {
+  const link = document.getElementById('invite-link-box').textContent;
+  navigator.clipboard?.writeText(link).then(() => { showToast('✅ Link copied!'); closeModalDirect(); })
+    .catch(() => showToast('Copy manually'));
+}
+function closeModal(e) { if (e.target.id === 'modal-overlay') closeModalDirect(); }
+function closeModalDirect() { document.getElementById('modal-overlay').classList.remove('active'); }
+function copyMyId() {
+  if (!myId) return;
+  navigator.clipboard?.writeText(myId).then(() => showToast('📋 ID copied!')).catch(()=>{});
+}
+
+/* ═══════════════════════════════════════════════════════════════
    BOOT SEQUENCE
-   ══════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
   loadAndRenderHistory();
-  initPeer();
 
-  $remoteIn.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') connectToPeer();
-  });
+  if (!ensureDisplayName()) {
+    // Prompt shown; initPeer will be called after name is saved.
+  } else {
+    initPeer();
+  }
 
+  $remoteIn.addEventListener('keydown', e => { if (e.key==='Enter') connectToPeer(); });
   window.addEventListener('hashchange', () => {
-    const hash = window.location.hash.slice(1).trim();
-    if (hash && hash !== myId && myId) {
-      autoConnectFromHash(hash);
-    }
+    const hash = location.hash.slice(1).trim();
+    if (hash && hash !== myId && myId) autoConnectFromHash(hash);
   });
 });
 </script>
