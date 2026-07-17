@@ -1,0 +1,2887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TeaSpill Gossip P2P · Chill Mesh Chat</title>
+
+<!-- PeerJS CDN (Zero‑Backend WebRTC) -->
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap');
+
+  :root {
+    --wa-green:         #00a884;
+    --wa-green-lt:      #00d6a6;
+    --wa-bg-dark:       #0b141a;
+    --wa-bg-panel:      #111b21;
+    --wa-bg-chat:       #0b141a;
+    --wa-bg-bubble-in:  #202c33;
+    --wa-bg-bubble-out: #005c4b;
+    --wa-text-light:    #e9edef;
+    --wa-text-muted:    #8696a0;
+    --wa-border:        #222e35;
+    --wa-accent:        #53bdeb;
+    --wa-input-bg:      #2a3942;
+    --wa-hover:         #202c33;
+    --wa-active:        #2a3942;
+    --shadow:           rgba(0, 0, 0, 0.25);
+    --radius:           10px;
+    --mono:             'JetBrains Mono', monospace;
+    --display:          'Baloo 2', cursive;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--wa-bg-dark);
+    color: var(--wa-text-light);
+    font-family: var(--display);
+    font-size: 15px;
+    line-height: 1.5;
+    overflow: hidden;
+  }
+
+  #app {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    height: 100dvh;
+    width: 100vw;
+    background: var(--wa-bg-dark);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* ── SIDEBAR ── */
+  #sidebar {
+    background: var(--wa-bg-panel);
+    border-right: 1px solid var(--wa-border);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    z-index: 10;
+  }
+
+  .sidebar-header {
+    background: var(--wa-bg-bubble-in);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--wa-border);
+    gap: 8px;
+  }
+
+  .my-profile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .avatar {
+    width: 40px;
+    height: 40px;
+    background: var(--wa-input-bg);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    flex-shrink: 0;
+    border: 1px solid var(--wa-border);
+  }
+
+  .profile-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .my-name {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--wa-text-light);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .my-id-label {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--wa-green-lt);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .my-id-label:hover { text-decoration: underline; }
+
+  /* ── CONNECT PANEL ── */
+  .connect-panel {
+    padding: 12px 16px;
+    background: var(--wa-bg-panel);
+    border-bottom: 1px solid var(--wa-border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .connect-input-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  #remote-id-input {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    padding: 8px 12px;
+    border: 1px solid var(--wa-border);
+    border-radius: 8px;
+    background: var(--wa-input-bg);
+    color: var(--wa-text-light);
+    outline: none;
+  }
+  #remote-id-input:focus { border-color: var(--wa-green); }
+  #remote-id-input::placeholder { color: var(--wa-text-muted); }
+
+  /* ── CHATS LIST ── */
+  .chats-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .chats-list::-webkit-scrollbar { width: 4px; }
+  .chats-list::-webkit-scrollbar-thumb { background: var(--wa-border); border-radius: 4px; }
+
+  .chat-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    gap: 12px;
+    border-bottom: 1px solid var(--wa-border);
+    cursor: pointer;
+    transition: background 0.2s;
+    user-select: none;
+  }
+  .chat-item:hover { background: var(--wa-hover); }
+  .chat-item.active { background: var(--wa-active); }
+
+  .chat-item-meta {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .chat-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .chat-item-name {
+    font-weight: 700;
+    font-size: 0.92rem;
+    color: var(--wa-text-light);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chat-item-time {
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    color: var(--wa-text-muted);
+  }
+
+  .chat-item-body {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .chat-item-msg {
+    font-size: 0.78rem;
+    color: var(--wa-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+  }
+  .chat-item.typing .chat-item-msg {
+    color: var(--wa-green-lt);
+    font-weight: 600;
+  }
+
+  .unread-badge {
+    background: var(--wa-green);
+    color: var(--wa-bg-panel);
+    font-size: 0.65rem;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 20px;
+    min-width: 18px;
+    text-align: center;
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #555;
+    flex-shrink: 0;
+  }
+  .status-dot.online {
+    background: var(--wa-green-lt);
+    box-shadow: 0 0 6px var(--wa-green-lt);
+  }
+
+  /* ── CHAT PANE ── */
+  #chat-pane {
+    background: var(--wa-bg-chat);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+  }
+
+  .chat-pane-welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    text-align: center;
+    color: var(--wa-text-muted);
+    padding: 24px;
+    background:
+      radial-gradient(circle at center, rgba(0, 168, 132, 0.05) 0%, transparent 70%),
+      var(--wa-bg-chat);
+  }
+  .chat-pane-welcome .welcome-icon {
+    font-size: 5rem;
+    margin-bottom: 12px;
+    animation: bounce 2s infinite ease-in-out;
+  }
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+
+  .chat-header {
+    background: var(--wa-bg-bubble-in);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--wa-border);
+    z-index: 10;
+    gap: 12px;
+  }
+
+  .active-chat-user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .active-user-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .active-user-name {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--wa-text-light);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .active-user-status {
+    font-size: 0.72rem;
+    color: var(--wa-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chat-header-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  #status-badge {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 100px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .status--loading    { background: #333; color: #999; }
+  .status--waiting    { background: #4a3c10; color: #ffd15c; }
+  .status--connecting { background: #133a52; color: #53bdeb; }
+  .status--connected  { background: #005c4b; color: #00e676; }
+  .status--error      { background: #5a1010; color: #ff5252; }
+
+  #peer-count-badge {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    background: var(--wa-input-bg);
+    color: var(--wa-text-muted);
+    padding: 2px 8px;
+    border-radius: 100px;
+  }
+
+  /* ── MESSAGES ── */
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    scroll-behavior: smooth;
+    background:
+      linear-gradient(rgba(11, 20, 26, 0.95), rgba(11, 20, 26, 0.95)),
+      url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
+    background-repeat: repeat;
+  }
+  #messages::-webkit-scrollbar { width: 6px; }
+  #messages::-webkit-scrollbar-thumb { background: var(--wa-border); border-radius: 4px; }
+
+  /* ── BUBBLES ── */
+  .msg-wrapper {
+    display: flex;
+    flex-direction: column;
+    max-width: 65%;
+    animation: fadeUp 0.2s ease-out;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .msg-wrapper.outgoing { align-self: flex-end; align-items: flex-end; }
+  .msg-wrapper.incoming { align-self: flex-start; align-items: flex-start; }
+
+  .bubble {
+    padding: 8px 12px 6px;
+    border-radius: 12px;
+    font-size: 0.88rem;
+    line-height: 1.45;
+    word-break: break-word;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  }
+  .outgoing .bubble {
+    background: var(--wa-bg-bubble-out);
+    color: var(--wa-text-light);
+    border-top-right-radius: 0px;
+  }
+  .incoming .bubble {
+    background: var(--wa-bg-bubble-in);
+    color: var(--wa-text-light);
+    border-top-left-radius: 0px;
+  }
+  .bubble.permanent {
+    outline: 2px solid var(--wa-green);
+    outline-offset: 2px;
+  }
+
+  .msg-sender {
+    font-size: 0.68rem;
+    font-weight: 700;
+    margin-bottom: 2px;
+    color: var(--wa-green-lt);
+  }
+
+  .reply-quote {
+    background: rgba(0, 0, 0, 0.2);
+    border-left: 4px solid var(--wa-green);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    color: var(--wa-text-muted);
+    margin-bottom: 6px;
+  }
+
+  .msg-footer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+  }
+
+  .msg-time {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    color: var(--wa-text-muted);
+  }
+
+  .reply-btn, .edit-btn {
+    background: none;
+    border: none;
+    font-size: 0.85rem;
+    cursor: pointer;
+    padding: 2px;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+  }
+  .reply-btn:hover, .edit-btn:hover { opacity: 1; }
+
+  .save-btn {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 4px;
+    border: 1px solid var(--wa-border);
+    background: transparent;
+    color: var(--wa-text-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .save-btn:hover {
+    background: var(--wa-green);
+    color: var(--wa-bg-panel);
+    border-color: var(--wa-green);
+  }
+  .permanent-badge {
+    font-size: 0.58rem;
+    background: var(--wa-green);
+    color: var(--wa-bg-panel);
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-weight: 700;
+  }
+
+  /* ── SYSTEM MESSAGES ── */
+  .sys-msg {
+    text-align: center;
+    font-size: 0.68rem;
+    font-family: var(--mono);
+    color: var(--wa-text-muted);
+    padding: 6px 12px;
+    background: var(--wa-bg-panel);
+    border-radius: 6px;
+    align-self: center;
+    margin: 8px 0;
+    border: 1px solid var(--wa-border);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  }
+
+  /* ── REPLY PREVIEW BAR ── */
+  #reply-preview {
+    background: var(--wa-bg-bubble-in);
+    border-top: 1px solid var(--wa-border);
+    padding: 8px 16px;
+    display: none;
+    align-items: center;
+    gap: 10px;
+    z-index: 5;
+  }
+  #reply-preview.active { display: flex; }
+  .reply-preview-content {
+    flex: 1;
+    font-size: 0.78rem;
+    padding: 6px 10px;
+    background: rgba(0, 168, 132, 0.08);
+    border-left: 4px solid var(--wa-green);
+    border-radius: 6px;
+    color: var(--wa-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .reply-cancel {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: var(--wa-text-muted);
+  }
+
+  /* ── FOOTER INPUT ── */
+  #chat-footer {
+    background: var(--wa-bg-panel);
+    border-top: 1px solid var(--wa-border);
+    padding: 10px 16px;
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    z-index: 10;
+  }
+
+  #msg-input {
+    flex: 1;
+    font-family: var(--display);
+    font-size: 0.88rem;
+    padding: 8px 12px;
+    border: 1px solid var(--wa-border);
+    border-radius: 8px;
+    background: var(--wa-input-bg);
+    color: var(--wa-text-light);
+    outline: none;
+    resize: none;
+    max-height: 120px;
+    min-height: 38px;
+    transition: border-color 0.2s;
+    line-height: 1.4;
+  }
+  #msg-input:focus { border-color: var(--wa-green); }
+  #msg-input::placeholder { color: var(--wa-text-muted); }
+  #msg-input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--wa-text-muted);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+    transition: background 0.2s, color 0.2s;
+  }
+  .btn-icon:hover {
+    background: var(--wa-hover);
+    color: var(--wa-text-light);
+  }
+  .btn-icon:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  #send-btn {
+    background: var(--wa-green);
+    color: var(--wa-bg-panel);
+  }
+  #send-btn:hover {
+    background: var(--wa-green-lt);
+    color: var(--wa-bg-panel);
+  }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--wa-bg-panel);
+    color: var(--wa-text-light);
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    padding: 8px 16px;
+    border-radius: 8px;
+    opacity: 0;
+    transition: opacity 0.3s, transform 0.3s;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 1000;
+    border: 1px solid var(--wa-green);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+  }
+  #toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* ── MODALS ── */
+  #modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  #modal-overlay.active { display: flex; }
+
+  #modal {
+    background: var(--wa-bg-panel);
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 380px;
+    width: calc(100% - 40px);
+    border: 1px solid var(--wa-border);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+
+  .modal-title {
+    font-size: 1.1rem;
+    font-weight: 800;
+    margin-bottom: 6px;
+  }
+  .modal-sub {
+    font-size: 0.78rem;
+    color: var(--wa-text-muted);
+    margin-bottom: 14px;
+  }
+
+  #invite-link-box {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    padding: 10px;
+    border: 1px solid var(--wa-border);
+    border-radius: 8px;
+    background: var(--wa-input-bg);
+    color: var(--wa-text-light);
+    word-break: break-all;
+    margin-bottom: 14px;
+  }
+
+  .btn {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 0.82rem;
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.2s;
+  }
+  .btn-primary { background: var(--wa-green); color: var(--wa-bg-panel); }
+  .btn-primary:hover { background: var(--wa-green-lt); }
+  .btn-dark { background: var(--wa-input-bg); color: var(--wa-text-light); }
+  .btn-dark:hover { background: var(--wa-hover); }
+  .btn-green { background: #198754; color: white; }
+  .btn-green:hover { background: #157347; }
+  .btn-sm { font-size: 0.7rem; padding: 4px 8px; border-radius: 6px; }
+
+  /* ── NAME PROMPT ── */
+  #name-prompt-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    backdrop-filter: blur(4px);
+  }
+  #name-prompt {
+    background: var(--wa-bg-panel);
+    padding: 24px;
+    border-radius: 12px;
+    border: 1px solid var(--wa-border);
+    max-width: 340px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  }
+  #name-prompt h3 { margin-bottom: 16px; font-weight: 800; }
+  #display-name-input, #node-id-input {
+    width: 100%;
+    padding: 10px;
+    font-size: 0.9rem;
+    border: 1px solid var(--wa-border);
+    border-radius: 8px;
+    background: var(--wa-input-bg);
+    color: var(--wa-text-light);
+    margin-bottom: 16px;
+    outline: none;
+    text-align: center;
+  }
+  #display-name-input:focus, #node-id-input:focus { border-color: var(--wa-green); }
+
+  #back-btn {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--wa-text-light);
+    font-size: 1.4rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    margin-right: 4px;
+  }
+
+  @media (max-width: 768px) {
+    #app {
+      grid-template-columns: 1fr;
+    }
+    #sidebar {
+      display: flex;
+    }
+    #chat-pane {
+      display: none;
+      position: absolute;
+      inset: 0;
+      z-index: 50;
+    }
+    #app.chat-active #sidebar {
+      display: none;
+    }
+    #app.chat-active #chat-pane {
+      display: flex;
+    }
+    #back-btn {
+      display: block;
+    }
+  }
+
+  /* ── FILE CONTAINER ── */
+  .file-container {
+    display: flex;
+    flex-direction: column;
+    background: rgba(0,0,0,0.2);
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--wa-border);
+    margin-top: 4px;
+    max-width: 100%;
+  }
+  .file-image-preview {
+    max-width: 100%;
+    max-height: 200px;
+    border-radius: 8px;
+    object-fit: cover;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .file-image-preview:hover {
+    opacity: 0.9;
+  }
+  .file-icon-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .file-icon {
+    font-size: 2rem;
+  }
+  .file-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .file-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    word-break: break-all;
+    line-height: 1.2;
+    color: var(--wa-text-light);
+  }
+  .file-size {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--wa-text-muted);
+    margin-top: 2px;
+  }
+  .file-expired-text {
+    font-size: 0.7rem;
+    color: var(--wa-text-muted);
+    margin-top: 6px;
+    font-style: italic;
+  }
+  .file-container.expired {
+    opacity: 0.7;
+  }
+
+  /* ── CODE BLOCKS ── */
+  .code-block {
+    background: var(--wa-bg-dark);
+    color: #a9b7c6;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    padding: 10px 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 6px 0;
+    border: 1px solid var(--wa-border);
+    white-space: pre;
+    text-align: left;
+  }
+  .inline-code {
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--wa-green-lt);
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  .outgoing .inline-code {
+    background: rgba(255,255,255,0.15);
+    color: #fff8e7;
+  }
+
+  /* ── AUDIO CONTAINER ── */
+  .audio-container {
+    display: flex;
+    flex-direction: column;
+    padding: 6px 4px;
+    margin-top: 4px;
+  }
+  .audio-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.08); opacity: 0.8; }
+  }
+</style>
+</head>
+<div id="app">
+
+  <!-- ── SIDEBAR ── -->
+  <div id="sidebar">
+    <div class="sidebar-header">
+      <div class="my-profile">
+        <div class="avatar" id="my-avatar">🍵</div>
+        <div class="profile-info">
+          <div class="my-name" id="my-display-name">Guest</div>
+          <div class="my-id-label" id="my-peer-id" title="Click to copy" onclick="copyMyId()">ID: —</div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <button class="btn btn-dark btn-sm" onclick="openInviteModal()">Invite</button>
+        <button class="btn-icon" onclick="openSettingsModal()" title="Server Settings" style="width: 32px; height: 32px; font-size: 0.95rem;">⚙️</button>
+      </div>
+    </div>
+
+    <div class="connect-panel">
+      <div class="connect-input-row">
+        <input id="remote-id-input" type="text" placeholder="Connect to Peer ID…" autocomplete="off" autocapitalize="off" spellcheck="false" />
+        <button class="btn btn-primary btn-sm" onclick="connectToPeer()">Connect</button>
+      </div>
+    </div>
+
+    <div class="chats-list" id="chats-list">
+      <!-- Populated dynamically -->
+    </div>
+
+    <!-- Developer Tool Panel -->
+    <div id="dev-panel" style="padding: 10px 16px; border-top: 1px solid var(--wa-border); background: var(--wa-bg-bubble-in); display: flex; align-items: center; justify-content: space-between; font-size: 0.72rem; color: var(--wa-text-muted); gap: 6px;">
+      <button class="btn btn-dark btn-sm" onclick="runMonkeyTest()" style="font-size: 0.62rem; padding: 4px 8px; flex: 1; justify-content: center;">🐒 Monkey Test</button>
+      <button class="btn btn-primary btn-sm" onclick="enterPostmanMode()" style="font-size: 0.62rem; padding: 4px 8px; flex: 1; justify-content: center; background: var(--wa-green); color: var(--wa-bg-panel);">📮 Become Postman</button>
+    </div>
+  </div>
+
+  <!-- ── CHAT PANE ── -->
+  <div id="chat-pane">
+    <!-- Welcome screen shown if activeChatPeerId is null -->
+    <div class="chat-pane-welcome" id="chat-welcome">
+      <span class="welcome-icon">🍵</span>
+      <h2>Spill the Tea via Gossip P2P</h2>
+      <p style="margin-top: 8px; font-size: 0.88rem; max-width: 280px; line-height: 1.4;">Select an existing contact or enter a Peer ID to start a direct secure gossip session.</p>
+    </div>
+
+    <!-- Active Chat Screen (hidden by default) -->
+    <div id="active-chat-container" style="display: none; flex-direction: column; height: 100%;">
+      <div class="chat-header">
+        <div class="active-chat-user">
+          <button id="back-btn" onclick="deselectChat()">←</button>
+          <div class="avatar" id="active-avatar">👤</div>
+          <div class="active-user-meta">
+            <div class="active-user-name" id="active-user-name">Loading...</div>
+            <div class="active-user-status" id="active-user-status">Online</div>
+          </div>
+        </div>
+        <div class="chat-header-info">
+          <div id="status-badge" class="status--loading">ID Generating...</div>
+          <span id="peer-count-badge">👥 0 peers</span>
+        </div>
+      </div>
+
+      <!-- Reply Preview Bar -->
+      <div id="reply-preview">
+        <div class="reply-preview-content" id="reply-preview-text">Replying to ...</div>
+        <button class="reply-cancel" onclick="cancelReply()">&times;</button>
+      </div>
+
+      <!-- Messages Area -->
+      <div id="messages">
+        <!-- Messages will be populated here -->
+      </div>
+
+      <!-- Footer Input Area -->
+      <footer id="chat-footer">
+        <label for="file-input" class="btn-icon" id="attach-btn" title="Share File/Image">
+          📎
+        </label>
+        <input type="file" id="file-input" style="display: none;" onchange="sendFile(this)" disabled />
+        <button class="btn-icon" id="mic-btn" title="Record Voice Message" onclick="toggleAudioRecord()" disabled>
+          🎤
+        </button>
+        <textarea id="msg-input" placeholder="Type a message… (Enter to send)" rows="1" disabled oninput="autoResize(this); handleInputChange()" onkeydown="handleKey(event)"></textarea>
+        <button class="btn-icon" id="send-btn" onclick="sendMessage()" title="Send">➤</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST ── -->
+<div id="toast"></div>
+
+<!-- ── INVITE MODAL ── -->
+<div id="modal-overlay" onclick="closeModal(event)">
+  <div id="modal">
+    <div class="modal-title">📎 Invite Link</div>
+    <div class="modal-sub">Share this link. When they open it, chat starts automatically.</div>
+    <div id="invite-link-box">—</div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="copyInviteLink()">📋 Copy Link</button>
+      <button class="btn btn-dark" onclick="closeModalDirect()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── SETTINGS MODAL ── -->
+<div id="settings-modal-overlay" onclick="closeSettingsModal(event)" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+  <div id="settings-modal" style="background: var(--wa-bg-panel); border-radius: 12px; padding: 24px; max-width: 380px; width: calc(100% - 40px); border: 1px solid var(--wa-border); box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
+    <div class="modal-title" style="font-size: 1.1rem; font-weight: 800; margin-bottom: 6px; color: var(--wa-text-light);">⚙️ Profile & Server Settings</div>
+    <div class="modal-sub" style="font-size: 0.78rem; color: var(--wa-text-muted); margin-bottom: 16px;">Manage your profile identity and signaling server.</div>
+    
+    <!-- Profile Info -->
+    <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--wa-border);">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <label style="font-size: 0.72rem; color: var(--wa-text-muted); font-weight: 600;">Display Name</label>
+        <input type="text" id="settings-display-name" placeholder="e.g. Kesari" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--wa-border); background: var(--wa-input-bg); color: var(--wa-text-light); outline: none; font-size: 0.82rem;" />
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <label style="font-size: 0.72rem; color: var(--wa-text-muted); font-weight: 600;">Custom Node ID (Optional)</label>
+        <input type="text" id="settings-node-id" placeholder="Leave blank for random UUID" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--wa-border); background: var(--wa-input-bg); color: var(--wa-text-light); outline: none; font-size: 0.82rem;" />
+      </div>
+    </div>
+
+    <div style="margin-bottom: 14px; display: flex; align-items: center; gap: 8px;">
+      <input type="checkbox" id="custom-server-toggle" onchange="toggleCustomServerFields()" style="width: 16px; height: 16px; accent-color: var(--wa-green);" />
+      <label for="custom-server-toggle" style="font-size: 0.85rem; font-weight: 600; cursor: pointer; user-select: none; color: var(--wa-text-light);">Use Custom PeerServer</label>
+    </div>
+
+    <div id="custom-server-fields" style="display: none; flex-direction: column; gap: 10px; margin-bottom: 16px;">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <label style="font-size: 0.72rem; color: var(--wa-text-muted); font-weight: 600;">Host</label>
+        <input type="text" id="custom-server-host" placeholder="e.g. 0.peerjs.com" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--wa-border); background: var(--wa-input-bg); color: var(--wa-text-light); outline: none; font-size: 0.82rem;" />
+      </div>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <label style="font-size: 0.72rem; color: var(--wa-text-muted); font-weight: 600;">Port</label>
+          <input type="number" id="custom-server-port" placeholder="e.g. 443" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--wa-border); background: var(--wa-input-bg); color: var(--wa-text-light); outline: none; font-size: 0.82rem;" />
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <label style="font-size: 0.72rem; color: var(--wa-text-muted); font-weight: 600;">Path</label>
+          <input type="text" id="custom-server-path" placeholder="e.g. /" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--wa-border); background: var(--wa-input-bg); color: var(--wa-text-light); outline: none; font-size: 0.82rem;" />
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+        <input type="checkbox" id="custom-server-secure" style="width: 14px; height: 14px; accent-color: var(--wa-green);" checked />
+        <label for="custom-server-secure" style="font-size: 0.78rem; cursor: pointer; user-select: none; color: var(--wa-text-muted);">Secure (SSL / WSS)</label>
+      </div>
+    </div>
+
+    <div class="modal-actions" style="display: flex; gap: 8px; justify-content: flex-end;">
+      <button class="btn btn-dark" onclick="closeSettingsModalDirect()" style="font-size: 0.78rem;">Cancel</button>
+      <button class="btn btn-primary" onclick="saveServerConfig()" style="font-size: 0.78rem;">Save & Restart</button>
+    </div>
+  </div>
+</div>
+
+<!-- Simple name prompt (shown only if no name) -->
+<div id="name-prompt-overlay" style="display: none;">
+  <div id="name-prompt" style="max-width: 360px;">
+    <h3 style="margin-bottom: 8px;">👤 Your Display Name</h3>
+    <input type="text" id="display-name-input" placeholder="e.g., Kesari" maxlength="20" autocomplete="off" onkeydown="if(event.key==='Enter') saveDisplayName()" />
+    
+    <h3 style="margin-top: 8px; margin-bottom: 8px;">🔑 Custom Node ID (Optional)</h3>
+    <input type="text" id="node-id-input" placeholder="e.g., kesari-node (leave blank for random)" autocomplete="off" onkeydown="if(event.key==='Enter') saveDisplayName()" />
+    
+    <button class="btn btn-primary" style="width:100%; margin-top: 8px;" onclick="saveDisplayName()">Continue</button>
+  </div>
+</div>
+
+<!-- ── POSTMAN MODE OVERLAY ── -->
+<div id="postman-overlay" style="display: none; position: fixed; inset: 0; background: var(--wa-bg-dark); z-index: 500; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--wa-text-light);">
+  <div class="welcome-icon" style="font-size: 5rem; margin-bottom: 16px; animation: pulse 2s infinite ease-in-out;">📮</div>
+  <h2 style="font-weight: 800; font-size: 1.6rem; color: var(--wa-green-lt);">TeaSpill Postman Active</h2>
+  <p style="color: var(--wa-text-muted); font-size: 0.88rem; max-width: 300px; margin-top: 8px; line-height: 1.4;">This device is operating as a secure mesh relay node. It will route and forward encrypted packets between peers without saving or showing any chat content.</p>
+  
+  <div style="margin-top: 32px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 100%; max-width: 320px; background: var(--wa-bg-panel); padding: 20px; border-radius: 12px; border: 1px solid var(--wa-border);">
+    <div style="display: flex; flex-direction: column; gap: 4px;">
+      <span style="font-size: 0.68rem; text-transform: uppercase; color: var(--wa-text-muted); font-weight: 700; letter-spacing: 0.5px;">Peers Connected</span>
+      <span id="postman-peer-count" style="font-size: 1.8rem; font-weight: 800; color: var(--wa-text-light);">0</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 4px;">
+      <span style="font-size: 0.68rem; text-transform: uppercase; color: var(--wa-text-muted); font-weight: 700; letter-spacing: 0.5px;">Packets Relayed</span>
+      <span id="postman-relay-count" style="font-size: 1.8rem; font-weight: 800; color: var(--wa-green-lt);">0</span>
+    </div>
+  </div>
+
+  <div style="margin-top: 24px; font-family: var(--mono); font-size: 0.72rem; color: var(--wa-text-muted);">
+    Node ID: <span id="postman-my-id" style="color: var(--wa-text-light); cursor: pointer;" onclick="copyMyId()">—</span>
+  </div>
+
+  <button class="btn btn-dark" onclick="exitPostmanMode()" style="margin-top: 40px; font-size: 0.85rem; padding: 10px 24px; border-radius: 20px;">
+    Exit Postman Mode
+  </button>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   TEASPILL GOSSIP P2P — Mesh Chat with Identity, Auto‑Reconnect,
+   Heartbeat, Gossip Routing & Editing. 100% P2P, no server.
+   ═══════════════════════════════════════════════════════════════ */
+
+const STORAGE_KEY     = 'teaspill_messages';
+const PEER_ID_KEY     = 'teaspill_peer_id';
+const DISPLAY_NAME_KEY= 'teaspill_display_name';
+const MAX_AGE_MS      = 24 * 60 * 60 * 1000;  // 24h
+const HEARTBEAT_INTERVAL = 15000;             // 15 sec
+const RECONNECT_DELAY    = 3000;              // 3 sec
+
+// Global state
+let peer          = null;
+let activePeers   = [];                // Array of active PeerJS instances
+let connections   = [];                // Array of active Peer connections
+let myId          = localStorage.getItem(PEER_ID_KEY) || null;
+let displayName   = '';
+
+// Chat state
+let activeChatPeerId = null;
+const unreadCounts = new Map();
+const typingStates = new Map();
+const peerLastSeen = new Map(); // peerId -> timestamp
+const peerNames    = new Map(); // peerId -> displayName
+
+function isPeerOnline(peerId) {
+  const directOpen = connections.some(c => c.peer === peerId && c.open);
+  if (directOpen) return true;
+  const lastSeen = peerLastSeen.get(peerId);
+  if (lastSeen && (Date.now() - lastSeen) < 10000) return true;
+  return false;
+}
+
+function updateMyIdLabels() {
+  const activeIDs = activePeers
+    .filter(p => p.open)
+    .map(p => `${p.id || '—'} (${p.serverName})`);
+
+  const myPeerIdEl = document.getElementById('my-peer-id');
+  if (myPeerIdEl) {
+    if (activeIDs.length > 0) {
+      myPeerIdEl.textContent = `IDs: ${activeIDs.join(', ')}`;
+    } else {
+      myPeerIdEl.textContent = 'Connecting…';
+    }
+  }
+
+  const postmanIdEl = document.getElementById('postman-my-id');
+  if (postmanIdEl) {
+    postmanIdEl.textContent = activeIDs.length > 0 ? activeIDs.join(', ') : '—';
+  }
+}
+
+// Reply state
+let replyingTo    = null;              // { id, text, direction }
+
+// Message deduplication (prevent forwarding loops)
+const seenMessageIds = new Set();
+const MAX_SEEN_IDS   = 200;
+
+// Pending reconnects
+const reconnectAttempts = new Map();   // peerId -> { count, timer }
+
+// DOM refs
+const $status      = document.getElementById('status-badge');
+const $peerCount   = document.getElementById('peer-count-badge');
+const $myPeerId    = document.getElementById('my-peer-id');
+const $remoteIn    = document.getElementById('remote-id-input');
+const $msgInput    = document.getElementById('msg-input');
+const $messages    = document.getElementById('messages');
+const $replyPreview= document.getElementById('reply-preview');
+const $replyText   = document.getElementById('reply-preview-text');
+
+/* ═══════════════════════════════════════════════════════════════
+   0. IDENTITY SETUP (persistent Peer ID + Display Name)
+   ═══════════════════════════════════════════════════════════════ */
+function ensureDisplayName() {
+  const saved = localStorage.getItem(DISPLAY_NAME_KEY);
+  if (saved) {
+    displayName = saved;
+    const nameEl = document.getElementById('my-display-name');
+    if (nameEl) nameEl.textContent = saved;
+    return true;
+  }
+  // Show prompt
+  document.getElementById('name-prompt-overlay').style.display = 'flex';
+  document.getElementById('display-name-input').focus();
+  return false;
+}
+
+window.saveDisplayName = function() {
+  const input = document.getElementById('display-name-input');
+  const name = input.value.trim();
+  if (!name) {
+    showToast('Please enter a name');
+    return;
+  }
+  displayName = name;
+  localStorage.setItem(DISPLAY_NAME_KEY, name);
+
+  const nodeIdInput = document.getElementById('node-id-input');
+  if (nodeIdInput) {
+    const customNodeId = nodeIdInput.value.trim();
+    if (customNodeId) {
+      localStorage.setItem(PEER_ID_KEY, customNodeId);
+    } else {
+      localStorage.removeItem(PEER_ID_KEY);
+    }
+  }
+
+  document.getElementById('name-prompt-overlay').style.display = 'none';
+  const nameEl = document.getElementById('my-display-name');
+  if (nameEl) nameEl.textContent = name;
+  initPeer();
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   1. INITIALISE PEER (with persistent ID and Multi-server support)
+   ═══════════════════════════════════════════════════════════════ */
+function initPeer() {
+  setStatus('loading', 'Connecting servers…');
+
+  if (activePeers.length > 0) {
+    activePeers.forEach(p => {
+      try { p.destroy(); } catch(e){}
+    });
+    activePeers = [];
+  }
+
+  loadServersList();
+  const savedPeerId = localStorage.getItem(PEER_ID_KEY);
+  
+  const enabledServers = savedServers.filter(s => s.enabled);
+  if (enabledServers.length === 0) {
+    setStatus('waiting', 'No Servers Enabled');
+    showToast('⚠️ Please enable at least one server in settings');
+    return;
+  }
+
+  let openCount = 0;
+  enabledServers.forEach(srv => {
+    const options = {
+      host: srv.host,
+      port: srv.port,
+      path: srv.path,
+      secure: srv.secure,
+      debug: 0,
+      config: { iceServers: [ { urls: 'stun:stun.l.google.com:19302' } ] }
+    };
+    
+    let p;
+    try {
+      p = savedPeerId ? new Peer(savedPeerId, options) : new Peer(options);
+    } catch(err) {
+      console.error('Failed to create peer for server:', srv.name, err);
+      return;
+    }
+    
+    p.serverName = srv.name;
+    activePeers.push(p);
+
+    p.on('open', (id) => {
+      myId = id;
+      if (!savedPeerId) localStorage.setItem(PEER_ID_KEY, id);
+      updateMyIdLabels();
+      updatePeerCount();
+      
+      openCount++;
+      if (openCount === 1) {
+        startPresenceBroadcast();
+        const hash = window.location.hash.slice(1).trim();
+        if (hash && hash !== id) autoConnectFromHash(hash);
+      }
+    });
+
+    p.on('connection', (incomingConn) => {
+      setupConnection(incomingConn);
+      addSysMsg(`📡 Peer joined: ${incomingConn.peer.slice(0,8)}…`, incomingConn.peer);
+    });
+
+    p.on('error', (err) => {
+      console.error(`Peer connection error on server [${srv.name}]:`, err);
+    });
+
+    p.on('disconnected', () => {
+      p.reconnect();
+    });
+  });
+
+  peer = activePeers[0] || null;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   2. AUTO‑CONNECT FROM URL HASH
+   ═══════════════════════════════════════════════════════════════ */
+function autoConnectFromHash(remoteId) {
+  if (connections.some(c => c.peer === remoteId)) {
+    selectChat(remoteId);
+    return;
+  }
+  selectChat(remoteId);
+  addSysMsg(`Auto‑connecting to ${remoteId.slice(0,8)}…`, remoteId);
+  setStatus('connecting', '⟳ Connecting…');
+  $remoteIn.value = remoteId;
+  setTimeout(() => {
+    if (connections.some(c => c.peer === remoteId)) return;
+    
+    activePeers.forEach(p => {
+      if (p && !p.destroyed && !p.disconnected) {
+        try {
+          const c = p.connect(remoteId, { reliable: true, metadata: { via: 'invite' } });
+          setupConnection(c);
+        } catch (err) {}
+      }
+    });
+  }, 400);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   3. MANUAL CONNECT
+   ═══════════════════════════════════════════════════════════════ */
+function connectToPeer() {
+  const remoteId = $remoteIn.value.trim();
+  if (!remoteId) { showToast('Enter a Peer ID first.'); return; }
+  if (activePeers.length === 0) { showToast('No active peer servers initialized.'); return; }
+  if (remoteId === myId) { showToast("That's your own ID!"); return; }
+  if (connections.some(c => c.peer === remoteId)) {
+    showToast('Already connected or connecting to this peer.');
+    selectChat(remoteId);
+    $remoteIn.value = '';
+    return;
+  }
+
+  selectChat(remoteId);
+
+  setStatus('connecting', '⟳ Connecting…');
+  addSysMsg(`Connecting to ${remoteId.slice(0,8)}…`, remoteId);
+  
+  let attempted = false;
+  activePeers.forEach(p => {
+    if (p && !p.destroyed && !p.disconnected) {
+      try {
+        const c = p.connect(remoteId, { reliable: true });
+        setupConnection(c);
+        attempted = true;
+      } catch (err) {
+        console.warn('Failed connection attempt on server:', p.serverName, err);
+      }
+    }
+  });
+
+  if (!attempted) {
+    showToast('Failed to connect: no active signaling servers.');
+  }
+
+  $remoteIn.value = '';
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   4. SETUP DATA CONNECTION (with heartbeat & reconnect logic)
+   ═══════════════════════════════════════════════════════════════ */
+function setupConnection(conn) {
+  if (connections.some(c => c.peer === conn.peer)) {
+    console.warn('Already connected to', conn.peer);
+    conn.close();
+    return;
+  }
+
+  connections.push(conn);
+  conn.lastSeen = Date.now();
+  updatePeerCount();
+
+  // Heartbeat interval and timeout monitoring
+  const heartbeatTimer = setInterval(() => {
+    if (conn.open) {
+      try {
+        conn.send({ type: 'heartbeat', ts: Date.now() });
+      } catch (err) {
+        console.warn('Failed to send heartbeat, closing:', err);
+        conn.close();
+        handleConnectionClose(conn);
+        return;
+      }
+
+      if (Date.now() - conn.lastSeen > HEARTBEAT_INTERVAL * 2.5) {
+        console.warn(`Connection to ${conn.peer} timed out (no heartbeat received).`);
+        conn.close();
+        handleConnectionClose(conn);
+      }
+    }
+  }, HEARTBEAT_INTERVAL);
+
+  conn.heartbeatTimer = heartbeatTimer;
+
+  conn.on('open', () => {
+    conn.send({
+      type: 'identity',
+      senderId: myId,
+      senderName: displayName
+    });
+    addSysMsg(`🔒 Secure channel with ${conn.peer.slice(0,8)}…`, conn.peer);
+    updatePeerCount();
+    reconnectAttempts.delete(conn.peer);
+    updateChatsSidebar();
+    
+    if (postmanMode) {
+      broadcastPeerList();
+    }
+  });
+
+  conn.on('data', (data) => {
+    conn.lastSeen = Date.now();
+    
+    if (data.senderId) {
+      peerLastSeen.set(data.senderId, Date.now());
+      if (data.senderName) peerNames.set(data.senderId, data.senderName);
+    }
+
+    if (data.type === 'chat' || data.type === 'file' || data.type === 'audio') {
+      receiveMessage(data, conn);
+    } else if (data.type === 'edit') {
+      handleEditMessage(data, conn);
+    } else if (data.type === 'identity') {
+      conn.peerName = data.senderName;
+      peerLastSeen.set(data.senderId, Date.now());
+      peerNames.set(data.senderId, data.senderName);
+      updateChatsSidebar();
+      if (activeChatPeerId === conn.peer) {
+        document.getElementById('active-user-name').textContent = data.senderName;
+      }
+      if (postmanMode) {
+        broadcastPeerList();
+      }
+    } else if (data.type === 'typing') {
+      handleTypingStatus(data, conn);
+    } else if (data.type === 'presence') {
+      handlePresence(data, conn);
+    } else if (data.type === 'peer-list') {
+      handlePeerList(data);
+    } else if (data.type === 'heartbeat') {
+      // keep alive
+    }
+  });
+
+  conn.on('close', () => {
+    handleConnectionClose(conn);
+  });
+
+  conn.on('error', (err) => {
+    console.warn('Connection error', err);
+    handleConnectionClose(conn);
+  });
+}
+
+function handleConnectionClose(conn) {
+  if (!connections.includes(conn)) return;
+  clearInterval(conn.heartbeatTimer);
+  connections = connections.filter(c => c !== conn);
+
+  const peerId = conn.peer;
+  updatePeerCount();
+  addSysMsg(`⚠️ Peer ${peerId.slice(0,8)} disconnected.`, peerId);
+  updateChatsSidebar();
+  
+  if (postmanMode) {
+    broadcastPeerList();
+  }
+
+  // Schedule reconnect unless we already have an open connection to that peer
+  if (!connections.some(c => c.peer === peerId && c.open)) {
+    scheduleReconnect(peerId);
+  }
+}
+
+function scheduleReconnect(peerId) {
+  if (reconnectAttempts.has(peerId)) {
+    const entry = reconnectAttempts.get(peerId);
+    if (entry.count >= 5) {
+      addSysMsg(`❌ Giving up reconnect to ${peerId.slice(0,8)}`, peerId);
+      reconnectAttempts.delete(peerId);
+      return;
+    }
+    if (entry.timer) clearTimeout(entry.timer);
+    entry.count++;
+  } else {
+    reconnectAttempts.set(peerId, { count: 1, timer: null });
+  }
+
+  addSysMsg(`🔄 Reconnecting to ${peerId.slice(0,8)} in 3s…`, peerId);
+  const timer = setTimeout(() => {
+    if (activePeers.length === 0) return;
+    if (connections.some(c => c.peer === peerId && c.open)) {
+      reconnectAttempts.delete(peerId);
+      return;
+    }
+    
+    activePeers.forEach(p => {
+      if (p && !p.destroyed && !p.disconnected) {
+        try {
+          const c = p.connect(peerId, { reliable: true });
+          setupConnection(c);
+        } catch (err) {}
+      }
+    });
+  }, RECONNECT_DELAY);
+
+  const entry = reconnectAttempts.get(peerId);
+  if (entry) entry.timer = timer;
+}
+
+function updatePeerCount() {
+  const openCount = connections.filter(c => c.open).length;
+  const peerCountEl = document.getElementById('peer-count-badge');
+  if (peerCountEl) peerCountEl.textContent = `👥 ${openCount} peer${openCount !== 1 ? 's' : ''}`;
+
+  const fileInput = document.getElementById('file-input');
+  const attachBtn = document.getElementById('attach-btn');
+  const micBtn = document.getElementById('mic-btn');
+
+  if (activeChatPeerId) {
+    $msgInput.disabled = false;
+    const hasMesh = openCount > 0;
+    if (fileInput) fileInput.disabled = !hasMesh;
+    if (attachBtn) attachBtn.style.opacity = hasMesh ? '1' : '0.5';
+    if (micBtn) {
+      micBtn.disabled = !hasMesh;
+      micBtn.style.opacity = hasMesh ? '1' : '0.5';
+    }
+  } else {
+    $msgInput.disabled = true;
+    if (fileInput) fileInput.disabled = true;
+    if (attachBtn) attachBtn.style.opacity = '0.5';
+    if (micBtn) {
+      micBtn.disabled = true;
+      micBtn.style.opacity = '0.5';
+      if (typeof isRecording !== 'undefined' && isRecording) stopRecording();
+    }
+  }
+
+  if (openCount > 0) {
+    setStatus('connected', '● Connected!');
+  } else {
+    if (connections.length > 0) {
+      setStatus('connecting', '⟳ Connecting…');
+    } else if (myId) {
+      setStatus('waiting', 'Waiting for Peer…');
+    }
+  }
+  updateActiveChatHeaderStatus();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   5. SEND MESSAGE (with reply, edit support)
+   ═══════════════════════════════════════════════════════════════ */
+let editingMessageId = null;  // if we're editing an existing message
+
+function sendMessage() {
+  const text = $msgInput.value.trim();
+  if (!text) return;
+  if (!activeChatPeerId) return;
+
+  // If editing an existing message
+  if (editingMessageId) {
+    finalizeEdit(editingMessageId, text);
+    return;
+  }
+
+  const msgObj = {
+    type:       'chat',
+    id:         crypto.randomUUID(),
+    text:       text,
+    timestamp:  Date.now(),
+    direction:  'outgoing',
+    permanent:  false,
+    senderId:   myId,
+    senderName: displayName,
+    recipientId: activeChatPeerId,
+    chatWith:   activeChatPeerId,
+    visitedPeers: [myId],
+    replyTo:    replyingTo ? { id: replyingTo.id, text: replyingTo.text, direction: replyingTo.direction } : null
+  };
+
+  // Send to all open connections
+  connections.forEach(conn => { if (conn.open) conn.send(msgObj); });
+
+  // Also save locally
+  saveMessage(msgObj);
+  renderMessage(msgObj);
+
+  $msgInput.value = '';
+  $msgInput.style.height = '44px';
+  autoResize($msgInput);
+  scrollToBottom();
+  cancelReply();
+
+  if (lastTypingSent) {
+    sendTypingStatus(false);
+    lastTypingSent = false;
+  }
+
+  // Mark as seen to avoid forwarding loops
+  seenMessageIds.add(msgObj.id);
+  if (seenMessageIds.size > MAX_SEEN_IDS) {
+    const iter = seenMessageIds.values();
+    for (let i=0; i<50; i++) seenMessageIds.delete(iter.next().value);
+  }
+  updateChatsSidebar();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   6. RECEIVE MESSAGE (with forwarding)
+   ═══════════════════════════════════════════════════════════════ */
+function receiveMessage(data, sourceConn) {
+  // Deduplicate
+  if (seenMessageIds.has(data.id)) return;
+  seenMessageIds.add(data.id);
+  if (seenMessageIds.size > MAX_SEEN_IDS) {
+    const iter = seenMessageIds.values();
+    for (let i=0; i<50; i++) seenMessageIds.delete(iter.next().value);
+  }
+
+  if (postmanMode) {
+    packetsRelayedCount++;
+    updatePostmanUI();
+  } else {
+    const isForMe = data.recipientId === myId;
+    if (isForMe) {
+      const msgObj = {
+        ...data,
+        chatWith: data.senderId,
+        direction: 'incoming'
+      };
+
+      saveMessage(msgObj);
+      
+      if (activeChatPeerId === data.senderId) {
+        renderMessage(msgObj);
+        scrollToBottom();
+      } else {
+        incrementUnread(data.senderId);
+      }
+      updateChatsSidebar();
+    }
+  }
+
+  // Gossip Protocol: Track visited peers to avoid redundant sends
+  if (!data.visitedPeers) {
+    data.visitedPeers = [];
+  }
+  if (!data.visitedPeers.includes(myId)) {
+    data.visitedPeers.push(myId);
+  }
+
+  // Forward to all other connected peers who haven't seen it yet (mesh broadcast)
+  connections.forEach(conn => {
+    if (conn.open && conn !== sourceConn && !data.visitedPeers.includes(conn.peer)) {
+      conn.send(data);
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   7. MESSAGE EDITING
+   ═══════════════════════════════════════════════════════════════ */
+function startEdit(msgId) {
+  const messages = loadMessages();
+  const msg = messages.find(m => m.id === msgId);
+  if (!msg || msg.direction !== 'outgoing') return;
+
+  editingMessageId = msgId;
+  $msgInput.value = msg.text;
+  $msgInput.focus();
+  autoResize($msgInput);
+  showToast('✏️ Edit your message and press Enter');
+}
+
+function finalizeEdit(msgId, newText) {
+  if (!newText.trim()) {
+    cancelEdit();
+    return;
+  }
+
+  const messages = loadMessages();
+  const idx = messages.findIndex(m => m.id === msgId);
+  if (idx === -1) return;
+
+  messages[idx].text = newText;
+  messages[idx].edited = true;
+  persistMessages(messages);
+
+  // Update UI
+  const bubble = document.querySelector(`.msg-wrapper[data-msg-id="${msgId}"] .bubble`);
+  if (bubble) {
+    // Rebuild content: keep reply quote if present, update main text
+    const msg = messages[idx];
+    const quoteHtml = msg.replyTo ? `<div class="reply-quote">↩️ ${escapeHTML(msg.replyTo.text)}</div>` : '';
+    bubble.innerHTML = quoteHtml + formatMessageText(msg.text) + (msg.edited ? ' <span style="opacity:0.7; font-size:0.7rem;">(edited)</span>' : '');
+  }
+
+  // Broadcast edit to all peers
+  const editPacket = {
+    type: 'edit',
+    id: crypto.randomUUID(),
+    messageId: msgId,
+    newText: newText,
+    senderId: myId,
+    visitedPeers: [myId]
+  };
+  connections.forEach(conn => { if (conn.open) conn.send(editPacket); });
+
+  cancelEdit();
+  showToast('✅ Message updated');
+}
+
+function handleEditMessage(packet, sourceConn) {
+  if (seenMessageIds.has(packet.id)) return;
+  seenMessageIds.add(packet.id);
+  if (seenMessageIds.size > MAX_SEEN_IDS) {
+    const iter = seenMessageIds.values();
+    for (let i=0; i<50; i++) seenMessageIds.delete(iter.next().value);
+  }
+
+  if (postmanMode) {
+    packetsRelayedCount++;
+    updatePostmanUI();
+  } else {
+    const isForMe = packet.recipientId === myId;
+    if (isForMe) {
+      const { messageId, newText } = packet;
+      const messages = loadMessages();
+      const idx = messages.findIndex(m => m.id === messageId);
+      if (idx !== -1) {
+        if (messages[idx].text !== newText || !messages[idx].edited) {
+          messages[idx].text = newText;
+          messages[idx].edited = true;
+          persistMessages(messages);
+
+          if (activeChatPeerId === packet.senderId) {
+            const bubble = document.querySelector(`.msg-wrapper[data-msg-id="${messageId}"] .bubble`);
+            if (bubble) {
+              const msg = messages[idx];
+              const quoteHtml = msg.replyTo ? `<div class="reply-quote">↩️ ${escapeHTML(msg.replyTo.text)}</div>` : '';
+              bubble.innerHTML = quoteHtml + formatMessageText(msg.text) + ' <span style="opacity:0.7; font-size:0.7rem;">(edited)</span>';
+            }
+          }
+          updateChatsSidebar();
+        }
+      }
+    }
+  }
+
+  // Gossip protocol for edits
+  if (!packet.visitedPeers) {
+    packet.visitedPeers = [];
+  }
+  if (!packet.visitedPeers.includes(myId)) {
+    packet.visitedPeers.push(myId);
+  }
+
+  // Forward to other connected peers not in visited list (mesh broadcast)
+  connections.forEach(conn => {
+    if (conn.open && conn !== sourceConn && !packet.visitedPeers.includes(conn.peer)) {
+      conn.send(packet);
+    }
+  });
+}
+
+function cancelEdit() {
+  editingMessageId = null;
+  $msgInput.value = '';
+  $msgInput.style.height = '44px';
+  autoResize($msgInput);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   8. RENDER MESSAGE (with sender name, edit button)
+   ═══════════════════════════════════════════════════════════════ */
+function renderMessage(msg) {
+  const emptyStateEl = document.getElementById('empty-state');
+  if (emptyStateEl) emptyStateEl.remove();
+
+  const wrapper = document.createElement('div');
+  wrapper.className = `msg-wrapper ${msg.direction}`;
+  wrapper.dataset.msgId = msg.id;
+
+  const timeStr = formatTime(msg.timestamp);
+  const isPerm  = msg.permanent;
+  const isOwn   = msg.direction === 'outgoing' || msg.senderId === myId;
+
+  // Sender name display (only for incoming, or we can show for all)
+  const senderDisplay = (msg.direction === 'incoming' && msg.senderName) 
+    ? `<div class="msg-sender">${escapeHTML(msg.senderName)}</div>` 
+    : (msg.direction === 'outgoing' ? `<div class="msg-sender">You</div>` : '');
+
+  let quoteHtml = '';
+  if (msg.replyTo) {
+    quoteHtml = `<div class="reply-quote">↩️ ${escapeHTML(msg.replyTo.text || '')}</div>`;
+  }
+
+  const editedMark = msg.edited ? ' <span style="opacity:0.7; font-size:0.7rem;">(edited)</span>' : '';
+
+  // Render content based on type (text or file or audio)
+  let contentHtml = '';
+  if (msg.type === 'file') {
+    const isImage = msg.fileType && msg.fileType.startsWith('image/');
+    const formattedSize = formatBytes(msg.fileSize);
+    
+    if (msg.fileData) {
+      // Create a Blob and Object URL
+      let blob;
+      if (msg.fileData instanceof Blob) {
+        blob = msg.fileData;
+      } else {
+        blob = new Blob([msg.fileData], { type: msg.fileType });
+      }
+      const url = URL.createObjectURL(blob);
+      
+      if (isImage) {
+        contentHtml = `
+          <div class="file-container">
+            <img src="${url}" class="file-image-preview" alt="${escapeHTML(msg.fileName)}" onclick="window.open('${url}', '_blank')" />
+            <div class="file-meta">
+              <span class="file-name">${escapeHTML(msg.fileName)}</span>
+              <span class="file-size">${formattedSize}</span>
+            </div>
+            <a href="${url}" download="${escapeHTML(msg.fileName)}" class="btn btn-green btn-sm" style="margin-top: 8px; width: 100%; justify-content: center;">⬇️ Download Image</a>
+          </div>
+        `;
+      } else {
+        contentHtml = `
+          <div class="file-container">
+            <div class="file-icon-row">
+              <span class="file-icon">📄</span>
+              <div class="file-meta">
+                <span class="file-name">${escapeHTML(msg.fileName)}</span>
+                <span class="file-size">${formattedSize}</span>
+              </div>
+            </div>
+            <a href="${url}" download="${escapeHTML(msg.fileName)}" class="btn btn-green btn-sm" style="margin-top: 8px; width: 100%; justify-content: center;">⬇️ Download File</a>
+          </div>
+        `;
+      }
+    } else {
+      // Historical file message loaded from localStorage (binary data stripped)
+      const icon = isImage ? '🖼️' : '📄';
+      contentHtml = `
+        <div class="file-container expired">
+          <div class="file-icon-row">
+            <span class="file-icon">${icon}</span>
+            <div class="file-meta">
+              <span class="file-name">${escapeHTML(msg.fileName)}</span>
+              <span class="file-size">${formattedSize} (Unavailable)</span>
+            </div>
+          </div>
+          <div class="file-expired-text">File only available during the session it was sent.</div>
+        </div>
+      `;
+    }
+  } else if (msg.type === 'audio') {
+    if (msg.fileData) {
+      let blob;
+      if (msg.fileData instanceof Blob) {
+        blob = msg.fileData;
+      } else {
+        blob = new Blob([msg.fileData], { type: msg.fileType || 'audio/webm' });
+      }
+      const url = URL.createObjectURL(blob);
+      contentHtml = `
+        <div class="audio-container">
+          <span class="audio-title">🎙️ Voice Message</span>
+          <audio src="${url}" controls style="width: 100%; max-width: 250px; margin-top: 6px;"></audio>
+        </div>
+      `;
+    } else {
+      contentHtml = `
+        <div class="audio-container expired">
+          <span class="audio-title">🎙️ Voice Message (Expired)</span>
+          <div class="file-expired-text">Audio only available during the session it was sent.</div>
+        </div>
+      `;
+    }
+  } else {
+    // Standard text message
+    contentHtml = `${formatMessageText(msg.text)}${editedMark}`;
+  }
+
+  wrapper.innerHTML = `
+    <div class="bubble ${isPerm ? 'permanent' : ''}" id="bubble-${msg.id}">
+      ${senderDisplay}
+      ${quoteHtml}
+      ${contentHtml}
+    </div>
+    <div class="msg-footer">
+      <span class="msg-time">${timeStr}</span>
+      ${msg.type === 'chat' ? `<button class="reply-btn" onclick="replyToMessage('${msg.id}')" title="Reply">↩️</button>` : ''}
+      ${isOwn && msg.type === 'chat' ? `<button class="edit-btn" onclick="startEdit('${msg.id}')" title="Edit">✏️</button>` : ''}
+      ${isPerm
+        ? `<span class="permanent-badge">📌 Saved</span>`
+        : `<button class="save-btn" id="savebtn-${msg.id}" onclick="saveForever('${msg.id}')">Save</button>`
+      }
+    </div>
+  `;
+
+  $messages.appendChild(wrapper);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   9. REPLY FEATURE
+   ═══════════════════════════════════════════════════════════════ */
+function replyToMessage(msgId) {
+  const messages = loadMessages();
+  const msg = messages.find(m => m.id === msgId);
+  if (!msg) return;
+
+  replyingTo = { id: msg.id, text: msg.text, direction: msg.direction };
+  const preview = (msg.text.length > 50) ? msg.text.slice(0,50)+'…' : msg.text;
+  $replyText.textContent = `↩️ Replying to: ${preview}`;
+  $replyPreview.classList.add('active');
+  $msgInput.focus();
+}
+
+function cancelReply() {
+  replyingTo = null;
+  $replyPreview.classList.remove('active');
+  $replyText.textContent = '';
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   10. SAVE FOREVER (Permanent)
+   ═══════════════════════════════════════════════════════════════ */
+function saveForever(msgId) {
+  const messages = loadMessages();
+  const idx = messages.findIndex(m => m.id === msgId);
+  if (idx === -1) return;
+  messages[idx].permanent = true;
+  persistMessages(messages);
+
+  const bubble = document.getElementById(`bubble-${msgId}`);
+  const saveBtn = document.getElementById(`savebtn-${msgId}`);
+  if (bubble) bubble.classList.add('permanent');
+  if (saveBtn) saveBtn.outerHTML = `<span class="permanent-badge">📌 Saved</span>`;
+  showToast('💾 Message saved permanently!');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   11. LOCALSTORAGE CRUD
+   ═══════════════════════════════════════════════════════════════ */
+function loadMessages() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+  catch { return []; }
+}
+function persistMessages(msgs) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(msgs)); }
+  catch(e) { console.warn('storage full', e); }
+}
+function saveMessage(msg) {
+  const msgs = loadMessages();
+  const savedMsg = { ...msg };
+  if (savedMsg.type === 'file' || savedMsg.type === 'audio') {
+    savedMsg.fileData = null; // strip heavy binary data before saving to localStorage
+  }
+  msgs.push(savedMsg);
+  persistMessages(msgs);
+}
+function pruneOldMessages() {
+  const msgs = loadMessages();
+  const now = Date.now();
+  const kept = msgs.filter(m => m.permanent || (now - m.timestamp) < MAX_AGE_MS);
+  persistMessages(kept);
+  return kept;
+}
+function loadAndRenderHistory() {
+  pruneOldMessages();
+  updateChatsSidebar();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   12. UTILITIES
+   ═══════════════════════════════════════════════════════════════ */
+function sendFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB limit
+  if (file.size > MAX_FILE_SIZE) {
+    showToast('⚠️ File is too large. Max limit is 20MB.');
+    input.value = '';
+    return;
+  }
+
+  if (!activeChatPeerId) return;
+
+  showToast(`Reading ${file.name}...`);
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const fileData = e.target.result; // ArrayBuffer
+    const msgObj = {
+      type:       'file',
+      id:         crypto.randomUUID(),
+      fileName:   file.name,
+      fileType:   file.type,
+      fileSize:   file.size,
+      fileData:   fileData,
+      senderId:   myId,
+      senderName: displayName,
+      recipientId: activeChatPeerId,
+      chatWith:   activeChatPeerId,
+      timestamp:  Date.now(),
+      direction:  'outgoing',
+      permanent:  false,
+      visitedPeers: [myId]
+    };
+
+    // Send to all open connections
+    connections.forEach(conn => {
+      if (conn.open) {
+        conn.send(msgObj);
+      }
+    });
+
+    // Save and render locally
+    saveMessage(msgObj);
+    renderMessage(msgObj);
+    scrollToBottom();
+
+    // Mark as seen
+    seenMessageIds.add(msgObj.id);
+    input.value = ''; // Reset input
+    updateChatsSidebar();
+  };
+
+  reader.onerror = function() {
+    showToast('❌ Failed to read file.');
+    input.value = '';
+  };
+
+  reader.readAsArrayBuffer(file);
+}
+
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function addSysMsg(text) {
+  const el = document.createElement('div');
+  el.className = 'sys-msg';
+  el.textContent = text;
+  $messages.appendChild(el);
+  scrollToBottom();
+}
+function setStatus(type, text) {
+  $status.textContent = text;
+  $status.className = `status--${type}`;
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+function scrollToBottom() { $messages.scrollTop = $messages.scrollHeight; }
+function formatTime(ts) {
+  const d = new Date(ts);
+  const today = new Date();
+  const isToday = d.toDateString() === today.toDateString();
+  const time = d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+  return isToday ? time : `${d.getDate()}/${d.getMonth()+1} ${time}`;
+}
+function escapeHTML(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/\n/g,'<br/>');
+}
+
+function formatMessageText(text) {
+  let escaped = String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const parts = [];
+  const codeBlockRegex = /```([\s\S]*?)```/g;
+  let lastIndex = 0;
+  let match;
+  
+  while ((match = codeBlockRegex.exec(escaped)) !== null) {
+    const before = escaped.substring(lastIndex, match.index);
+    parts.push(formatInlineElements(before));
+    const codeContent = match[1].replace(/^\n/, '').replace(/\n$/, '');
+    parts.push(`<pre class="code-block"><code>${codeContent}</code></pre>`);
+    lastIndex = codeBlockRegex.lastIndex;
+  }
+  
+  const after = escaped.substring(lastIndex);
+  parts.push(formatInlineElements(after));
+  return parts.join('');
+}
+
+function formatInlineElements(text) {
+  let formatted = text.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+  return formatted.replace(/\n/g, '<br/>');
+}
+
+/* ── VOICE RECORDER UTILITIES ── */
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
+
+function toggleAudioRecord() {
+  if (!isRecording) {
+    startRecording();
+  } else {
+    stopRecording();
+  }
+}
+
+function startRecording() {
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(stream => {
+      mediaRecorder = new MediaRecorder(stream);
+      audioChunks = [];
+      
+      mediaRecorder.ondataavailable = event => {
+        audioChunks.push(event.data);
+      };
+      
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        sendAudioMessage(audioBlob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+      
+      mediaRecorder.start();
+      isRecording = true;
+      const micBtn = document.getElementById('mic-btn');
+      if (micBtn) {
+        micBtn.textContent = '🔴';
+        micBtn.title = 'Stop Recording';
+      }
+      showToast('🎙️ Recording voice message...');
+    })
+    .catch(err => {
+      console.error('Microphone access denied:', err);
+      showToast('⚠️ Microphone access denied.');
+    });
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+  isRecording = false;
+  const micBtn = document.getElementById('mic-btn');
+  if (micBtn) {
+    micBtn.textContent = '🎤';
+    micBtn.title = 'Record Voice Message';
+  }
+}
+
+function sendAudioMessage(blob) {
+  if (!activeChatPeerId) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const fileData = e.target.result;
+    const msgObj = {
+      type:       'audio',
+      id:         crypto.randomUUID(),
+      fileData:   fileData,
+      fileType:   blob.type,
+      senderId:   myId,
+      senderName: displayName,
+      recipientId: activeChatPeerId,
+      chatWith:   activeChatPeerId,
+      timestamp:  Date.now(),
+      direction:  'outgoing',
+      permanent:  false,
+      visitedPeers: [myId]
+    };
+
+    connections.forEach(conn => {
+      if (conn.open) {
+        conn.send(msgObj);
+      }
+    });
+
+    saveMessage(msgObj);
+    renderMessage(msgObj);
+    scrollToBottom();
+    seenMessageIds.add(msgObj.id);
+    updateChatsSidebar();
+  };
+  reader.readAsArrayBuffer(blob);
+}
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+function handleKey(e) {
+  if (e.key === 'Escape') {
+    if (editingMessageId) {
+      cancelEdit();
+      showToast('Edit cancelled');
+    } else if (replyingTo) {
+      cancelReply();
+    }
+  } else if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    if (editingMessageId) finalizeEdit(editingMessageId, $msgInput.value.trim());
+    else sendMessage();
+  }
+}
+
+/* ── Invite & Copy ── */
+function openInviteModal() {
+  if (!myId) { showToast('Still generating ID…'); return; }
+  const base = location.origin + location.pathname;
+  document.getElementById('invite-link-box').textContent = `${base}#${myId}`;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+function copyInviteLink() {
+  const link = document.getElementById('invite-link-box').textContent;
+  navigator.clipboard?.writeText(link).then(() => { showToast('✅ Link copied!'); closeModalDirect(); })
+    .catch(() => showToast('Copy manually'));
+}
+function closeModal(e) { if (e.target.id === 'modal-overlay') closeModalDirect(); }
+function closeModalDirect() { document.getElementById('modal-overlay').classList.remove('active'); }
+function copyMyId() {
+  if (!myId) return;
+  navigator.clipboard?.writeText(myId).then(() => showToast('📋 ID copied!')).catch(()=>{});
+}
+
+/* ── MULTI-ROOM CHAT LOGIC ── */
+function updateActiveChatHeaderStatus() {
+  if (!activeChatPeerId) return;
+  const statusEl = document.getElementById('active-user-status');
+  if (!statusEl) return;
+  
+  const isOnline = isPeerOnline(activeChatPeerId);
+  
+  if (typingStates.get(activeChatPeerId)) {
+    statusEl.textContent = 'typing...';
+    statusEl.style.color = 'var(--wa-green-lt)';
+  } else {
+    statusEl.textContent = isOnline ? 'Online' : 'Offline';
+    statusEl.style.color = '';
+  }
+}
+
+function selectChat(peerId) {
+  activeChatPeerId = peerId;
+  unreadCounts.delete(peerId);
+  
+  // Toggle UI containers
+  const welcomeEl = document.getElementById('chat-welcome');
+  if (welcomeEl) welcomeEl.style.display = 'none';
+  
+  const containerEl = document.getElementById('active-chat-container');
+  if (containerEl) containerEl.style.display = 'flex';
+  
+  document.getElementById('app').classList.add('chat-active');
+  
+  // Find partner display name
+  const thread = getChatThreads().find(t => t.peerId === peerId);
+  const name = thread ? thread.displayName : peerId.slice(0, 8);
+  document.getElementById('active-user-name').textContent = name;
+  
+  updateActiveChatHeaderStatus();
+  
+  // Render history
+  $messages.innerHTML = '';
+  const messages = loadMessages().filter(m => m.chatWith === peerId);
+  if (messages.length === 0) {
+    $messages.innerHTML = `
+      <div id="empty-state" style="margin: auto; text-align: center; opacity: 0.5; pointer-events: none; padding: 24px;">
+        <span class="es-icon" style="font-size: 3rem; display: block; margin-bottom: 8px;">💬</span>
+        <p>No messages in this chat yet.<br/>Send a message to spill the tea.</p>
+      </div>
+    `;
+  } else {
+    messages.forEach(m => renderMessage(m));
+  }
+  
+  $msgInput.disabled = false;
+  $msgInput.focus();
+  autoResize($msgInput);
+  scrollToBottom();
+  
+  updateChatsSidebar();
+}
+
+function deselectChat() {
+  activeChatPeerId = null;
+  const welcomeEl = document.getElementById('chat-welcome');
+  if (welcomeEl) welcomeEl.style.display = 'flex';
+  
+  const containerEl = document.getElementById('active-chat-container');
+  if (containerEl) containerEl.style.display = 'none';
+  
+  document.getElementById('app').classList.remove('chat-active');
+  updateChatsSidebar();
+}
+
+function updateChatsSidebar() {
+  const threads = getChatThreads();
+  const listEl = document.getElementById('chats-list');
+  if (!listEl) return;
+  
+  listEl.innerHTML = '';
+  
+  if (threads.length === 0) {
+    listEl.innerHTML = `
+      <div style="padding: 24px; text-align: center; color: var(--wa-text-muted); font-size: 0.82rem; opacity: 0.7;">
+        No active chats yet.<br/>Connect to a Peer ID above!
+      </div>
+    `;
+    return;
+  }
+  
+  threads.forEach(t => {
+    const item = document.createElement('div');
+    item.className = `chat-item ${t.peerId === activeChatPeerId ? 'active' : ''} ${typingStates.get(t.peerId) ? 'typing' : ''}`;
+    item.onclick = () => selectChat(t.peerId);
+    
+    const statusDotClass = t.online ? 'status-dot online' : 'status-dot';
+    
+    let previewText = 'No messages';
+    let timeText = '';
+    if (t.lastMessage) {
+      if (t.lastMessage.type === 'file') {
+        previewText = `📄 ${t.lastMessage.fileName}`;
+      } else if (t.lastMessage.type === 'audio') {
+        previewText = '🎙️ Voice Message';
+      } else {
+        previewText = t.lastMessage.text;
+      }
+      timeText = formatTime(t.lastMessage.timestamp);
+    }
+    
+    if (typingStates.get(t.peerId)) {
+      previewText = 'typing...';
+    }
+    
+    const unreadCount = unreadCounts.get(t.peerId) || 0;
+    const badgeHtml = unreadCount > 0 ? `<span class="unread-badge">${unreadCount}</span>` : '';
+    
+    item.innerHTML = `
+      <div class="avatar">👤</div>
+      <div class="chat-item-meta">
+        <div class="chat-item-header">
+          <span class="chat-item-name">${escapeHTML(t.displayName)}</span>
+          <span class="chat-item-time">${timeText}</span>
+        </div>
+        <div class="chat-item-body">
+          <span class="chat-item-msg">${escapeHTML(previewText)}</span>
+          ${badgeHtml}
+          <div class="${statusDotClass}"></div>
+        </div>
+      </div>
+    `;
+    listEl.appendChild(item);
+  });
+  updateActiveChatHeaderStatus();
+}
+
+function getChatThreads() {
+  const messages = loadMessages();
+  const threads = new Map();
+    connections.forEach(c => {
+      threads.set(c.peer, {
+        peerId: c.peer,
+        lastMessage: null,
+        unreadCount: 0,
+        displayName: c.peerName || peerNames.get(c.peer) || c.peer.slice(0, 8),
+        online: isPeerOnline(c.peer)
+      });
+    });
+
+    // Also populate online peers from presence/peer-lists who don't have direct connections yet
+    peerLastSeen.forEach((timestamp, peerId) => {
+      if (peerId === myId) return;
+      if ((Date.now() - timestamp) < 10000 && !threads.has(peerId)) {
+        threads.set(peerId, {
+          peerId: peerId,
+          lastMessage: null,
+          unreadCount: 0,
+          displayName: peerNames.get(peerId) || peerId.slice(0, 8),
+          online: true
+        });
+      }
+    });
+
+  messages.forEach(m => {
+    const peerId = m.chatWith;
+    if (!peerId) return;
+    
+    const existing = threads.get(peerId) || {
+      peerId: peerId,
+      unreadCount: 0,
+      displayName: peerNames.get(peerId) || (m.senderId === myId ? (m.recipientName || peerId.slice(0,8)) : (m.senderName || peerId.slice(0,8))),
+      online: isPeerOnline(peerId)
+    };
+    
+    if (!existing.lastMessage || m.timestamp > existing.lastMessage.timestamp) {
+      existing.lastMessage = m;
+    }
+    
+    threads.set(peerId, existing);
+  });
+  
+  return Array.from(threads.values()).sort((a, b) => {
+    const timeA = a.lastMessage ? a.lastMessage.timestamp : 0;
+    const timeB = b.lastMessage ? b.lastMessage.timestamp : 0;
+    return timeB - timeA;
+  });
+}
+
+function incrementUnread(peerId) {
+  const current = unreadCounts.get(peerId) || 0;
+  unreadCounts.set(peerId, current + 1);
+  updateChatsSidebar();
+}
+
+/* ── LIVE TYPING NOTIFICATIONS ── */
+let typingTimeout = null;
+let lastTypingSent = false;
+
+function handleInputChange() {
+  if (!activeChatPeerId) return;
+  
+  if (!lastTypingSent) {
+    sendTypingStatus(true);
+    lastTypingSent = true;
+  }
+  
+  clearTimeout(typingTimeout);
+  typingTimeout = setTimeout(() => {
+    sendTypingStatus(false);
+    lastTypingSent = false;
+  }, 2000);
+}
+
+function sendTypingStatus(isTyping) {
+  if (!activeChatPeerId) return;
+  const packet = {
+    type: 'typing',
+    id: crypto.randomUUID(),
+    isTyping: isTyping,
+    senderId: myId,
+    recipientId: activeChatPeerId,
+    visitedPeers: [myId]
+  };
+  connections.forEach(conn => { if (conn.open) conn.send(packet); });
+}
+
+function handleTypingStatus(data, sourceConn) {
+  const { senderId, isTyping } = data;
+  
+  if (postmanMode) {
+    packetsRelayedCount++;
+    updatePostmanUI();
+  } else {
+    if (data.recipientId === myId) {
+      typingStates.set(senderId, isTyping);
+      updateActiveChatHeaderStatus();
+      updateChatsSidebar();
+    }
+  }
+
+  // Gossip routing for typing packets
+  if (!data.visitedPeers) data.visitedPeers = [];
+  if (!data.visitedPeers.includes(myId)) data.visitedPeers.push(myId);
+
+  connections.forEach(conn => {
+    if (conn.open && conn !== sourceConn && !data.visitedPeers.includes(conn.peer)) {
+      conn.send(data);
+    }
+  });
+}
+
+function addSysMsg(text, targetPeerId) {
+  if (targetPeerId && activeChatPeerId !== targetPeerId) return;
+  const el = document.createElement('div');
+  el.className = 'sys-msg';
+  el.textContent = text;
+  $messages.appendChild(el);
+  scrollToBottom();
+}
+
+/* ── MONKEY TEST SUITE ── */
+function runMonkeyTest() {
+  showToast('🐒 Starting Monkey Test...');
+  
+  const testErrors = [];
+  const captureError = (e) => {
+    testErrors.push(e.message || e);
+    console.error('Monkey Test captured error:', e);
+  };
+  
+  const origOnError = window.onerror;
+  window.onerror = function(message, source, lineno, colno, error) {
+    captureError(error || message);
+    if (origOnError) origOnError(message, source, lineno, colno, error);
+    return false;
+  };
+
+  try {
+    if (!displayName) {
+      displayName = 'MonkeyTester';
+      localStorage.setItem(DISPLAY_NAME_KEY, displayName);
+      const myNameEl = document.getElementById('my-display-name');
+      if (myNameEl) myNameEl.textContent = displayName;
+    }
+
+    const testPeerId = 'monkey-peer-id-12345';
+
+    selectChat(testPeerId);
+
+    if (activeChatPeerId !== testPeerId) {
+      throw new Error('Failed to select chat room monkey-peer-id-12345');
+    }
+
+    $msgInput.value = 'Monkey typed text message 🐒';
+    autoResize($msgInput);
+
+    receiveMessage({
+      type: 'chat',
+      id: crypto.randomUUID(),
+      text: 'Hello chimpanzee! Did you get the banana? 🍌',
+      timestamp: Date.now() - 5000,
+      senderId: testPeerId,
+      senderName: 'Simian Peer',
+      recipientId: myId || 'my-fake-id',
+      chatWith: testPeerId,
+      visitedPeers: [testPeerId]
+    }, null);
+
+    receiveMessage({
+      type: 'chat',
+      id: crypto.randomUUID(),
+      text: 'Here is some code:\n```javascript\nconst bananas = 5;\nconsole.log(bananas);\n```\nCool right?',
+      timestamp: Date.now() - 4000,
+      senderId: testPeerId,
+      senderName: 'Simian Peer',
+      recipientId: myId || 'my-fake-id',
+      chatWith: testPeerId,
+      visitedPeers: [testPeerId]
+    }, null);
+
+    receiveMessage({
+      type: 'chat',
+      id: crypto.randomUUID(),
+      text: 'Use `bananas.peel()` function to eat!',
+      timestamp: Date.now() - 3000,
+      senderId: testPeerId,
+      senderName: 'Simian Peer',
+      recipientId: myId || 'my-fake-id',
+      chatWith: testPeerId,
+      visitedPeers: [testPeerId]
+    }, null);
+
+    handleTypingStatus({
+      type: 'typing',
+      isTyping: true,
+      senderId: testPeerId
+    });
+
+    setTimeout(() => {
+      try {
+        handleTypingStatus({
+          type: 'typing',
+          isTyping: false,
+          senderId: testPeerId
+        });
+        
+        receiveMessage({
+          type: 'file',
+          id: crypto.randomUUID(),
+          fileName: 'monkey_business.pdf',
+          fileType: 'application/pdf',
+          fileSize: 45678,
+          fileData: null,
+          senderId: testPeerId,
+          senderName: 'Simian Peer',
+          recipientId: myId || 'my-fake-id',
+          chatWith: testPeerId,
+          visitedPeers: [testPeerId]
+        }, null);
+
+        window.onerror = origOnError;
+
+        if (testErrors.length > 0) {
+          showToast('❌ Monkey Test Failed with ' + testErrors.length + ' errors. Check console.');
+          alert('🐒 Monkey Test Failed:\n' + testErrors.join('\n'));
+        } else {
+          showToast('🟢 Monkey Test Completed Successfully!');
+          alert('🐒 Monkey Test Success!\nAll simulations (private routing, bubbles, code-blocks, typing indicators, metadata files) executed without any JS exceptions.');
+        }
+      } catch (err) {
+        captureError(err);
+        window.onerror = origOnError;
+        alert('🐒 Monkey Test Failed during async steps:\n' + testErrors.join('\n'));
+      }
+    }, 1500);
+
+  } catch (err) {
+    captureError(err);
+    window.onerror = origOnError;
+    showToast('❌ Monkey Test Failed. Check console.');
+    alert('🐒 Monkey Test Failed:\n' + testErrors.join('\n'));
+  }
+}
+
+/* ── SIGNALING SERVER SETTINGS ── */
+const SERVER_CONFIG_KEY = 'teaspill_server_config'; // Deprecated compatibility key
+const SERVERS_LIST_KEY = 'teaspill_servers_list';
+let savedServers = [];
+
+function loadServersList() {
+  const raw = localStorage.getItem(SERVERS_LIST_KEY);
+  if (raw) {
+    try {
+      savedServers = JSON.parse(raw);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  
+  if ((!savedServers || savedServers.length === 0)) {
+    const oldConfigRaw = localStorage.getItem(SERVER_CONFIG_KEY);
+    let oldConfig = null;
+    if (oldConfigRaw) {
+      try { oldConfig = JSON.parse(oldConfigRaw); } catch(e){}
+    }
+    
+    savedServers = [
+      { id: 'cloud', name: 'TeaSpill Cloud', host: '0.peerjs.com', port: 443, path: '/', secure: true, enabled: !oldConfig?.enabled }
+    ];
+    
+    if (oldConfig?.enabled) {
+      savedServers.push({
+        id: 'legacy-custom',
+        name: 'Custom Server',
+        host: oldConfig.host || '0.peerjs.com',
+        port: oldConfig.port ? parseInt(oldConfig.port) : 443,
+        path: oldConfig.path || '/',
+        secure: oldConfig.secure !== false,
+        enabled: true
+      });
+    }
+    localStorage.setItem(SERVERS_LIST_KEY, JSON.stringify(savedServers));
+  }
+}
+
+function openSettingsModal() {
+  const overlay = document.getElementById('settings-modal-overlay');
+  overlay.style.display = 'flex';
+  
+  // Populate profile info
+  document.getElementById('settings-display-name').value = displayName || '';
+  document.getElementById('settings-node-id').value = localStorage.getItem(PEER_ID_KEY) || '';
+  
+  loadServersList();
+  renderSettingsServers();
+}
+
+function renderSettingsServers() {
+  const listEl = document.getElementById('settings-servers-list');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  
+  savedServers.forEach((srv, index) => {
+    const item = document.createElement('div');
+    item.style.display = 'flex';
+    item.style.alignItems = 'center';
+    item.style.justifyContent = 'space-between';
+    item.style.padding = '8px 12px';
+    item.style.background = 'var(--wa-bg-bubble-out)';
+    item.style.borderRadius = '6px';
+    item.style.border = '1px solid var(--wa-border)';
+    item.style.fontSize = '0.75rem';
+    
+    item.innerHTML = `
+      <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
+        <input type="checkbox" ${srv.enabled ? 'checked' : ''} onchange="toggleServerEnabled(${index}, this.checked)" style="accent-color:var(--wa-green); cursor:pointer;" />
+        <div style="min-width:0;">
+          <div style="font-weight:700; color:var(--wa-text-light); text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${escapeHTML(srv.name)}</div>
+          <div style="font-size:0.65rem; color:var(--wa-text-muted); text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${srv.host}:${srv.port}${srv.path}</div>
+        </div>
+      </div>
+      ${srv.id !== 'cloud' ? `<button onclick="deleteServer(${index})" style="background:none; border:none; color:#f44336; cursor:pointer; font-size:0.95rem; margin-left:8px;" title="Delete Server">🗑️</button>` : ''}
+    `;
+    listEl.appendChild(item);
+  });
+}
+
+function toggleServerEnabled(index, checked) {
+  savedServers[index].enabled = checked;
+}
+
+function deleteServer(index) {
+  savedServers.splice(index, 1);
+  renderSettingsServers();
+}
+
+function toggleAddServerForm(show) {
+  const form = document.getElementById('add-server-form');
+  const shouldShow = show !== undefined ? show : (form.style.display === 'none');
+  form.style.display = shouldShow ? 'flex' : 'none';
+}
+
+function addServerToList() {
+  const name = document.getElementById('new-server-name').value.trim();
+  const host = document.getElementById('new-server-host').value.trim();
+  const portInput = document.getElementById('new-server-port').value.trim();
+  const path = document.getElementById('new-server-path').value.trim() || '/';
+  const secure = document.getElementById('new-server-secure').checked;
+
+  if (!name || !host || !portInput) {
+    showToast('Please enter all server details');
+    return;
+  }
+  const port = parseInt(portInput);
+
+  savedServers.push({
+    id: crypto.randomUUID(),
+    name,
+    host,
+    port,
+    path,
+    secure,
+    enabled: true
+  });
+
+  // Reset fields
+  document.getElementById('new-server-name').value = '';
+  document.getElementById('new-server-host').value = '';
+  document.getElementById('new-server-port').value = '';
+  document.getElementById('new-server-path').value = '/';
+  document.getElementById('new-server-secure').checked = false;
+
+  toggleAddServerForm(false);
+  renderSettingsServers();
+}
+
+function closeSettingsModal(e) {
+  if (e.target.id === 'settings-modal-overlay') closeSettingsModalDirect();
+}
+function closeSettingsModalDirect() {
+  document.getElementById('settings-modal-overlay').style.display = 'none';
+}
+
+function saveServerConfig() {
+  const newName = document.getElementById('settings-display-name').value.trim();
+  if (!newName) {
+    showToast('Please enter a display name');
+    return;
+  }
+  
+  const newNodeId = document.getElementById('settings-node-id').value.trim();
+  const oldNodeId = localStorage.getItem(PEER_ID_KEY) || '';
+
+  // Update profile variables
+  displayName = newName;
+  localStorage.setItem(DISPLAY_NAME_KEY, newName);
+  const myNameEl = document.getElementById('my-display-name');
+  if (myNameEl) myNameEl.textContent = newName;
+
+  if (newNodeId !== oldNodeId) {
+    if (newNodeId) {
+      localStorage.setItem(PEER_ID_KEY, newNodeId);
+    } else {
+      localStorage.removeItem(PEER_ID_KEY);
+    }
+  }
+
+  // Save servers list
+  localStorage.setItem(SERVERS_LIST_KEY, JSON.stringify(savedServers));
+  
+  closeSettingsModalDirect();
+  showToast('⚙️ Settings saved. Reconnecting servers...');
+  
+  // Clean close of connections
+  connections.forEach(c => {
+    try {
+      clearInterval(c.heartbeatTimer);
+      c.close();
+    } catch(e){}
+  });
+  connections = [];
+  updatePeerCount();
+  updateChatsSidebar();
+  
+  initPeer();
+}
+
+/* ── POSTMAN MODE RELAY LOGIC ── */
+let postmanMode = false;
+let packetsRelayedCount = 0;
+
+function enterPostmanMode() {
+  postmanMode = true;
+  localStorage.setItem('teaspill_postman_mode', 'true');
+  
+  deselectChat();
+  
+  document.getElementById('postman-overlay').style.display = 'flex';
+  document.getElementById('postman-my-id').textContent = myId || '—';
+  updatePostmanUI();
+}
+
+function exitPostmanMode() {
+  postmanMode = false;
+  localStorage.removeItem('teaspill_postman_mode');
+  document.getElementById('postman-overlay').style.display = 'none';
+  showToast('📮 Postman Mode Deactivated');
+  updatePeerCount();
+}
+
+function broadcastPeerList() {
+  if (!postmanMode) return;
+  const peerList = connections
+    .filter(c => c.open)
+    .map(c => ({
+      peerId: c.peer,
+      displayName: c.peerName || c.peer.slice(0, 8)
+    }));
+
+  const packet = {
+    type: 'peer-list',
+    id: crypto.randomUUID(),
+    peers: peerList,
+    senderId: myId
+  };
+
+  connections.forEach(conn => {
+    if (conn.open) {
+      conn.send(packet);
+    }
+  });
+}
+
+function handlePeerList(data) {
+  const { peers } = data;
+  let updated = false;
+  peers.forEach(p => {
+    if (p.peerId !== myId) {
+      peerNames.set(p.peerId, p.displayName);
+      peerLastSeen.set(p.peerId, Date.now());
+      
+      // Auto-populate thread placeholder so they appear in sidebar
+      const messages = loadMessages();
+      const hasHistory = messages.some(m => m.chatWith === p.peerId);
+      if (!hasHistory) {
+        // Render a dummy sys message or just update sidebar to list them
+        peerLastSeen.set(p.peerId, Date.now());
+      }
+      updated = true;
+    }
+  });
+  if (updated) {
+    updateChatsSidebar();
+    updateActiveChatHeaderStatus();
+  }
+}
+
+function updatePostmanUI() {
+  if (!postmanMode) return;
+  const openCount = connections.filter(c => c.open).length;
+  document.getElementById('postman-peer-count').textContent = openCount;
+  document.getElementById('postman-relay-count').textContent = packetsRelayedCount;
+}
+
+/* ── MESH PRESENCE ROUTING ── */
+let presenceInterval = null;
+
+function startPresenceBroadcast() {
+  if (presenceInterval) clearInterval(presenceInterval);
+  presenceInterval = setInterval(() => {
+    if (myId && connections.some(c => c.open)) {
+      const packet = {
+        type: 'presence',
+        id: crypto.randomUUID(),
+        senderId: myId,
+        senderName: displayName,
+        visitedPeers: [myId]
+      };
+      connections.forEach(conn => { if (conn.open) conn.send(packet); });
+    }
+  }, 4000);
+}
+
+function handlePresence(data, sourceConn) {
+  const { senderId, senderName } = data;
+  peerLastSeen.set(senderId, Date.now());
+  peerNames.set(senderId, senderName);
+
+  if (postmanMode) {
+    packetsRelayedCount++;
+    updatePostmanUI();
+  }
+
+  updateChatsSidebar();
+  updateActiveChatHeaderStatus();
+
+  // Gossip routing
+  if (!data.visitedPeers) data.visitedPeers = [];
+  if (!data.visitedPeers.includes(myId)) data.visitedPeers.push(myId);
+
+  connections.forEach(conn => {
+    if (conn.open && conn !== sourceConn && !data.visitedPeers.includes(conn.peer)) {
+      conn.send(data);
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BOOT SEQUENCE
+   ═══════════════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', () => {
+  loadAndRenderHistory();
+
+  if (localStorage.getItem('teaspill_postman_mode') === 'true') {
+    enterPostmanMode();
+  }
+
+  if (!ensureDisplayName()) {
+    // Prompt shown; initPeer will be called after name is saved.
+  } else {
+    initPeer();
+  }
+
+  $remoteIn.addEventListener('keydown', e => { if (e.key==='Enter') connectToPeer(); });
+  window.addEventListener('hashchange', () => {
+    const hash = location.hash.slice(1).trim();
+    if (hash && hash !== myId && myId) autoConnectFromHash(hash);
+  });
+});
+</script>
+</body>
+</html>
