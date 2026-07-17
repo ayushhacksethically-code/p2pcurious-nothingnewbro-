@@ -694,7 +694,7 @@
     box-shadow: 0 10px 30px rgba(0,0,0,0.5);
   }
   #name-prompt h3 { margin-bottom: 16px; font-weight: 800; }
-  #display-name-input {
+  #display-name-input, #node-id-input {
     width: 100%;
     padding: 10px;
     font-size: 0.9rem;
@@ -706,7 +706,7 @@
     outline: none;
     text-align: center;
   }
-  #display-name-input:focus { border-color: var(--wa-green); }
+  #display-name-input:focus, #node-id-input:focus { border-color: var(--wa-green); }
 
   #back-btn {
     display: none;
@@ -955,9 +955,21 @@
 <!-- ── SETTINGS MODAL ── -->
 <div id="settings-modal-overlay" onclick="closeSettingsModal(event)" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
   <div id="settings-modal" style="background: var(--wa-bg-panel); border-radius: 12px; padding: 24px; max-width: 380px; width: calc(100% - 40px); border: 1px solid var(--wa-border); box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
-    <div class="modal-title" style="font-size: 1.1rem; font-weight: 800; margin-bottom: 6px; color: var(--wa-text-light);">⚙️ Server Settings</div>
-    <div class="modal-sub" style="font-size: 0.78rem; color: var(--wa-text-muted); margin-bottom: 16px;">Configure your own custom PeerJS signaling server.</div>
+    <div class="modal-title" style="font-size: 1.1rem; font-weight: 800; margin-bottom: 6px; color: var(--wa-text-light);">⚙️ Profile & Server Settings</div>
+    <div class="modal-sub" style="font-size: 0.78rem; color: var(--wa-text-muted); margin-bottom: 16px;">Manage your profile identity and signaling server.</div>
     
+    <!-- Profile Info -->
+    <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--wa-border);">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <label style="font-size: 0.72rem; color: var(--wa-text-muted); font-weight: 600;">Display Name</label>
+        <input type="text" id="settings-display-name" placeholder="e.g. Kesari" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--wa-border); background: var(--wa-input-bg); color: var(--wa-text-light); outline: none; font-size: 0.82rem;" />
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <label style="font-size: 0.72rem; color: var(--wa-text-muted); font-weight: 600;">Custom Node ID (Optional)</label>
+        <input type="text" id="settings-node-id" placeholder="Leave blank for random UUID" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--wa-border); background: var(--wa-input-bg); color: var(--wa-text-light); outline: none; font-size: 0.82rem;" />
+      </div>
+    </div>
+
     <div style="margin-bottom: 14px; display: flex; align-items: center; gap: 8px;">
       <input type="checkbox" id="custom-server-toggle" onchange="toggleCustomServerFields()" style="width: 16px; height: 16px; accent-color: var(--wa-green);" />
       <label for="custom-server-toggle" style="font-size: 0.85rem; font-weight: 600; cursor: pointer; user-select: none; color: var(--wa-text-light);">Use Custom PeerServer</label>
@@ -995,10 +1007,14 @@
 
 <!-- Simple name prompt (shown only if no name) -->
 <div id="name-prompt-overlay" style="display: none;">
-  <div id="name-prompt">
-    <h3>👤 Your Display Name</h3>
+  <div id="name-prompt" style="max-width: 360px;">
+    <h3 style="margin-bottom: 8px;">👤 Your Display Name</h3>
     <input type="text" id="display-name-input" placeholder="e.g., Kesari" maxlength="20" autocomplete="off" onkeydown="if(event.key==='Enter') saveDisplayName()" />
-    <button class="btn btn-primary" style="width:100%;" onclick="saveDisplayName()">Continue</button>
+    
+    <h3 style="margin-top: 8px; margin-bottom: 8px;">🔑 Custom Node ID (Optional)</h3>
+    <input type="text" id="node-id-input" placeholder="e.g., kesari-node (leave blank for random)" autocomplete="off" onkeydown="if(event.key==='Enter') saveDisplayName()" />
+    
+    <button class="btn btn-primary" style="width:100%; margin-top: 8px;" onclick="saveDisplayName()">Continue</button>
   </div>
 </div>
 
@@ -1098,6 +1114,17 @@ window.saveDisplayName = function() {
   }
   displayName = name;
   localStorage.setItem(DISPLAY_NAME_KEY, name);
+
+  const nodeIdInput = document.getElementById('node-id-input');
+  if (nodeIdInput) {
+    const customNodeId = nodeIdInput.value.trim();
+    if (customNodeId) {
+      localStorage.setItem(PEER_ID_KEY, customNodeId);
+    } else {
+      localStorage.removeItem(PEER_ID_KEY);
+    }
+  }
+
   document.getElementById('name-prompt-overlay').style.display = 'none';
   const nameEl = document.getElementById('my-display-name');
   if (nameEl) nameEl.textContent = name;
@@ -2405,6 +2432,10 @@ function openSettingsModal() {
   const overlay = document.getElementById('settings-modal-overlay');
   overlay.style.display = 'flex';
   
+  // Populate profile info
+  document.getElementById('settings-display-name').value = displayName || '';
+  document.getElementById('settings-node-id').value = localStorage.getItem(PEER_ID_KEY) || '';
+  
   const configRaw = localStorage.getItem(SERVER_CONFIG_KEY);
   if (configRaw) {
     try {
@@ -2440,6 +2471,31 @@ function toggleCustomServerFields() {
 }
 
 function saveServerConfig() {
+  const newName = document.getElementById('settings-display-name').value.trim();
+  if (!newName) {
+    showToast('Please enter a display name');
+    return;
+  }
+  
+  const newNodeId = document.getElementById('settings-node-id').value.trim();
+  const oldNodeId = localStorage.getItem(PEER_ID_KEY) || '';
+
+  // Update profile variables
+  displayName = newName;
+  localStorage.setItem(DISPLAY_NAME_KEY, newName);
+  const myNameEl = document.getElementById('my-display-name');
+  if (myNameEl) myNameEl.textContent = newName;
+
+  let idChanged = false;
+  if (newNodeId !== oldNodeId) {
+    if (newNodeId) {
+      localStorage.setItem(PEER_ID_KEY, newNodeId);
+    } else {
+      localStorage.removeItem(PEER_ID_KEY);
+    }
+    idChanged = true;
+  }
+
   const enabled = document.getElementById('custom-server-toggle').checked;
   const host = document.getElementById('custom-server-host').value.trim();
   const port = document.getElementById('custom-server-port').value.trim();
@@ -2450,7 +2506,7 @@ function saveServerConfig() {
   localStorage.setItem(SERVER_CONFIG_KEY, JSON.stringify(config));
   
   closeSettingsModalDirect();
-  showToast('⚙️ Server config saved. Restarting...');
+  showToast('⚙️ Settings saved. Reconnecting...');
   
   if (peer) {
     connections.forEach(c => {
