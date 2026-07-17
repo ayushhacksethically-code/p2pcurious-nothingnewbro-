@@ -841,8 +841,9 @@
     font-weight: 600;
     margin-bottom: 4px;
   }
-  .audio-container.expired {
-    opacity: 0.6;
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.08); opacity: 0.8; }
   }
 </style>
 </head>
@@ -876,9 +877,9 @@
     </div>
 
     <!-- Developer Tool Panel -->
-    <div id="dev-panel" style="padding: 10px 16px; border-top: 1px solid var(--wa-border); background: var(--wa-bg-bubble-in); display: flex; align-items: center; justify-content: space-between; font-size: 0.72rem; color: var(--wa-text-muted);">
-      <span>🐒 Developer Tools</span>
-      <button class="btn btn-dark btn-sm" onclick="runMonkeyTest()" style="font-size: 0.65rem; padding: 4px 8px;">Run Monkey Test</button>
+    <div id="dev-panel" style="padding: 10px 16px; border-top: 1px solid var(--wa-border); background: var(--wa-bg-bubble-in); display: flex; align-items: center; justify-content: space-between; font-size: 0.72rem; color: var(--wa-text-muted); gap: 6px;">
+      <button class="btn btn-dark btn-sm" onclick="runMonkeyTest()" style="font-size: 0.62rem; padding: 4px 8px; flex: 1; justify-content: center;">🐒 Monkey Test</button>
+      <button class="btn btn-primary btn-sm" onclick="enterPostmanMode()" style="font-size: 0.62rem; padding: 4px 8px; flex: 1; justify-content: center; background: var(--wa-green); color: var(--wa-bg-panel);">📮 Become Postman</button>
     </div>
   </div>
 
@@ -999,6 +1000,32 @@
     <input type="text" id="display-name-input" placeholder="e.g., Kesari" maxlength="20" autocomplete="off" onkeydown="if(event.key==='Enter') saveDisplayName()" />
     <button class="btn btn-primary" style="width:100%;" onclick="saveDisplayName()">Continue</button>
   </div>
+</div>
+
+<!-- ── POSTMAN MODE OVERLAY ── -->
+<div id="postman-overlay" style="display: none; position: fixed; inset: 0; background: var(--wa-bg-dark); z-index: 500; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--wa-text-light);">
+  <div class="welcome-icon" style="font-size: 5rem; margin-bottom: 16px; animation: pulse 2s infinite ease-in-out;">📮</div>
+  <h2 style="font-weight: 800; font-size: 1.6rem; color: var(--wa-green-lt);">TeaSpill Postman Active</h2>
+  <p style="color: var(--wa-text-muted); font-size: 0.88rem; max-width: 300px; margin-top: 8px; line-height: 1.4;">This device is operating as a secure mesh relay node. It will route and forward encrypted packets between peers without saving or showing any chat content.</p>
+  
+  <div style="margin-top: 32px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 100%; max-width: 320px; background: var(--wa-bg-panel); padding: 20px; border-radius: 12px; border: 1px solid var(--wa-border);">
+    <div style="display: flex; flex-direction: column; gap: 4px;">
+      <span style="font-size: 0.68rem; text-transform: uppercase; color: var(--wa-text-muted); font-weight: 700; letter-spacing: 0.5px;">Peers Connected</span>
+      <span id="postman-peer-count" style="font-size: 1.8rem; font-weight: 800; color: var(--wa-text-light);">0</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 4px;">
+      <span style="font-size: 0.68rem; text-transform: uppercase; color: var(--wa-text-muted); font-weight: 700; letter-spacing: 0.5px;">Packets Relayed</span>
+      <span id="postman-relay-count" style="font-size: 1.8rem; font-weight: 800; color: var(--wa-green-lt);">0</span>
+    </div>
+  </div>
+
+  <div style="margin-top: 24px; font-family: var(--mono); font-size: 0.72rem; color: var(--wa-text-muted);">
+    Node ID: <span id="postman-my-id" style="color: var(--wa-text-light); cursor: pointer;" onclick="copyMyId()">—</span>
+  </div>
+
+  <button class="btn btn-dark" onclick="exitPostmanMode()" style="margin-top: 40px; font-size: 0.85rem; padding: 10px 24px; border-radius: 20px;">
+    Exit Postman Mode
+  </button>
 </div>
 
 <script>
@@ -1414,25 +1441,28 @@ function receiveMessage(data, sourceConn) {
     for (let i=0; i<50; i++) seenMessageIds.delete(iter.next().value);
   }
 
-  const isForMe = data.recipientId === myId;
-  const isFromMe = data.senderId === myId;
+  if (postmanMode) {
+    packetsRelayedCount++;
+    updatePostmanUI();
+  } else {
+    const isForMe = data.recipientId === myId;
+    if (isForMe) {
+      const msgObj = {
+        ...data,
+        chatWith: data.senderId,
+        direction: 'incoming'
+      };
 
-  if (isForMe) {
-    const msgObj = {
-      ...data,
-      chatWith: data.senderId,
-      direction: 'incoming'
-    };
-
-    saveMessage(msgObj);
-    
-    if (activeChatPeerId === data.senderId) {
-      renderMessage(msgObj);
-      scrollToBottom();
-    } else {
-      incrementUnread(data.senderId);
+      saveMessage(msgObj);
+      
+      if (activeChatPeerId === data.senderId) {
+        renderMessage(msgObj);
+        scrollToBottom();
+      } else {
+        incrementUnread(data.senderId);
+      }
+      updateChatsSidebar();
     }
-    updateChatsSidebar();
   }
 
   // Gossip Protocol: Track visited peers to avoid redundant sends
@@ -1512,22 +1542,33 @@ function handleEditMessage(packet, sourceConn) {
     for (let i=0; i<50; i++) seenMessageIds.delete(iter.next().value);
   }
 
-  const { messageId, newText } = packet;
-  const messages = loadMessages();
-  const idx = messages.findIndex(m => m.id === messageId);
-  if (idx === -1) return;
+  if (postmanMode) {
+    packetsRelayedCount++;
+    updatePostmanUI();
+  } else {
+    const isForMe = packet.recipientId === myId;
+    if (isForMe) {
+      const { messageId, newText } = packet;
+      const messages = loadMessages();
+      const idx = messages.findIndex(m => m.id === messageId);
+      if (idx !== -1) {
+        if (messages[idx].text !== newText || !messages[idx].edited) {
+          messages[idx].text = newText;
+          messages[idx].edited = true;
+          persistMessages(messages);
 
-  if (messages[idx].text === newText && messages[idx].edited) return;
-
-  messages[idx].text = newText;
-  messages[idx].edited = true;
-  persistMessages(messages);
-
-  const bubble = document.querySelector(`.msg-wrapper[data-msg-id="${messageId}"] .bubble`);
-  if (bubble) {
-    const msg = messages[idx];
-    const quoteHtml = msg.replyTo ? `<div class="reply-quote">↩️ ${escapeHTML(msg.replyTo.text)}</div>` : '';
-    bubble.innerHTML = quoteHtml + formatMessageText(msg.text) + ' <span style="opacity:0.7; font-size:0.7rem;">(edited)</span>';
+          if (activeChatPeerId === packet.senderId) {
+            const bubble = document.querySelector(`.msg-wrapper[data-msg-id="${messageId}"] .bubble`);
+            if (bubble) {
+              const msg = messages[idx];
+              const quoteHtml = msg.replyTo ? `<div class="reply-quote">↩️ ${escapeHTML(msg.replyTo.text)}</div>` : '';
+              bubble.innerHTML = quoteHtml + formatMessageText(msg.text) + ' <span style="opacity:0.7; font-size:0.7rem;">(edited)</span>';
+            }
+          }
+          updateChatsSidebar();
+        }
+      }
+    }
   }
 
   // Gossip protocol for edits
@@ -2427,11 +2468,45 @@ function saveServerConfig() {
   }, 500);
 }
 
+/* ── POSTMAN MODE RELAY LOGIC ── */
+let postmanMode = false;
+let packetsRelayedCount = 0;
+
+function enterPostmanMode() {
+  postmanMode = true;
+  localStorage.setItem('teaspill_postman_mode', 'true');
+  
+  deselectChat();
+  
+  document.getElementById('postman-overlay').style.display = 'flex';
+  document.getElementById('postman-my-id').textContent = myId || '—';
+  updatePostmanUI();
+}
+
+function exitPostmanMode() {
+  postmanMode = false;
+  localStorage.removeItem('teaspill_postman_mode');
+  document.getElementById('postman-overlay').style.display = 'none';
+  showToast('📮 Postman Mode Deactivated');
+  updatePeerCount();
+}
+
+function updatePostmanUI() {
+  if (!postmanMode) return;
+  const openCount = connections.filter(c => c.open).length;
+  document.getElementById('postman-peer-count').textContent = openCount;
+  document.getElementById('postman-relay-count').textContent = packetsRelayedCount;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    BOOT SEQUENCE
    ═══════════════════════════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
   loadAndRenderHistory();
+
+  if (localStorage.getItem('teaspill_postman_mode') === 'true') {
+    enterPostmanMode();
+  }
 
   if (!ensureDisplayName()) {
     // Prompt shown; initPeer will be called after name is saved.
