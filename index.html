@@ -858,7 +858,10 @@
           <div class="my-id-label" id="my-peer-id" title="Click to copy" onclick="copyMyId()">ID: —</div>
         </div>
       </div>
-      <button class="btn btn-dark btn-sm" onclick="openInviteModal()">Invite</button>
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <button class="btn btn-dark btn-sm" onclick="openInviteModal()">Invite</button>
+        <button class="btn-icon" onclick="openSettingsModal()" title="Server Settings" style="width: 32px; height: 32px; font-size: 0.95rem;">⚙️</button>
+      </div>
     </div>
 
     <div class="connect-panel">
@@ -944,6 +947,47 @@
     <div class="modal-actions">
       <button class="btn btn-primary" onclick="copyInviteLink()">📋 Copy Link</button>
       <button class="btn btn-dark" onclick="closeModalDirect()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── SETTINGS MODAL ── -->
+<div id="settings-modal-overlay" onclick="closeSettingsModal(event)" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+  <div id="settings-modal" style="background: var(--wa-bg-panel); border-radius: 12px; padding: 24px; max-width: 380px; width: calc(100% - 40px); border: 1px solid var(--wa-border); box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
+    <div class="modal-title" style="font-size: 1.1rem; font-weight: 800; margin-bottom: 6px; color: var(--wa-text-light);">⚙️ Server Settings</div>
+    <div class="modal-sub" style="font-size: 0.78rem; color: var(--wa-text-muted); margin-bottom: 16px;">Configure your own custom PeerJS signaling server.</div>
+    
+    <div style="margin-bottom: 14px; display: flex; align-items: center; gap: 8px;">
+      <input type="checkbox" id="custom-server-toggle" onchange="toggleCustomServerFields()" style="width: 16px; height: 16px; accent-color: var(--wa-green);" />
+      <label for="custom-server-toggle" style="font-size: 0.85rem; font-weight: 600; cursor: pointer; user-select: none; color: var(--wa-text-light);">Use Custom PeerServer</label>
+    </div>
+
+    <div id="custom-server-fields" style="display: none; flex-direction: column; gap: 10px; margin-bottom: 16px;">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <label style="font-size: 0.72rem; color: var(--wa-text-muted); font-weight: 600;">Host</label>
+        <input type="text" id="custom-server-host" placeholder="e.g. 0.peerjs.com" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--wa-border); background: var(--wa-input-bg); color: var(--wa-text-light); outline: none; font-size: 0.82rem;" />
+      </div>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <label style="font-size: 0.72rem; color: var(--wa-text-muted); font-weight: 600;">Port</label>
+          <input type="number" id="custom-server-port" placeholder="e.g. 443" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--wa-border); background: var(--wa-input-bg); color: var(--wa-text-light); outline: none; font-size: 0.82rem;" />
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <label style="font-size: 0.72rem; color: var(--wa-text-muted); font-weight: 600;">Path</label>
+          <input type="text" id="custom-server-path" placeholder="e.g. /" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--wa-border); background: var(--wa-input-bg); color: var(--wa-text-light); outline: none; font-size: 0.82rem;" />
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+        <input type="checkbox" id="custom-server-secure" style="width: 14px; height: 14px; accent-color: var(--wa-green);" checked />
+        <label for="custom-server-secure" style="font-size: 0.78rem; cursor: pointer; user-select: none; color: var(--wa-text-muted);">Secure (SSL / WSS)</label>
+      </div>
+    </div>
+
+    <div class="modal-actions" style="display: flex; gap: 8px; justify-content: flex-end;">
+      <button class="btn btn-dark" onclick="closeSettingsModalDirect()" style="font-size: 0.78rem;">Cancel</button>
+      <button class="btn btn-primary" onclick="saveServerConfig()" style="font-size: 0.78rem;">Save & Restart</button>
     </div>
   </div>
 </div>
@@ -1044,6 +1088,23 @@ function initPeer() {
     debug: 0,
     config: { iceServers: [ { urls: 'stun:stun.l.google.com:19302' } ] }
   };
+
+  // Load custom signaling server configuration
+  const customServerRaw = localStorage.getItem(SERVER_CONFIG_KEY);
+  if (customServerRaw) {
+    try {
+      const config = JSON.parse(customServerRaw);
+      if (config.enabled) {
+        options.host = config.host || '0.peerjs.com';
+        options.port = config.port ? parseInt(config.port) : 443;
+        options.path = config.path || '/';
+        options.secure = config.secure !== false;
+        console.log('Using custom signaling PeerServer:', options.host, options.port, options.path, options.secure);
+      }
+    } catch (e) {
+      console.error('Failed to parse custom server config:', e);
+    }
+  }
 
   peer = savedPeerId ? new Peer(savedPeerId, options) : new Peer(options);
 
@@ -2294,6 +2355,76 @@ function runMonkeyTest() {
     showToast('❌ Monkey Test Failed. Check console.');
     alert('🐒 Monkey Test Failed:\n' + testErrors.join('\n'));
   }
+}
+
+/* ── SIGNALING SERVER SETTINGS ── */
+const SERVER_CONFIG_KEY = 'teaspill_server_config';
+
+function openSettingsModal() {
+  const overlay = document.getElementById('settings-modal-overlay');
+  overlay.style.display = 'flex';
+  
+  const configRaw = localStorage.getItem(SERVER_CONFIG_KEY);
+  if (configRaw) {
+    try {
+      const config = JSON.parse(configRaw);
+      document.getElementById('custom-server-toggle').checked = !!config.enabled;
+      document.getElementById('custom-server-host').value = config.host || '';
+      document.getElementById('custom-server-port').value = config.port || '';
+      document.getElementById('custom-server-path').value = config.path || '';
+      document.getElementById('custom-server-secure').checked = config.secure !== false;
+    } catch (e) {
+      console.error(e);
+    }
+  } else {
+    document.getElementById('custom-server-toggle').checked = false;
+    document.getElementById('custom-server-host').value = '';
+    document.getElementById('custom-server-port').value = '';
+    document.getElementById('custom-server-path').value = '';
+    document.getElementById('custom-server-secure').checked = true;
+  }
+  toggleCustomServerFields();
+}
+
+function closeSettingsModal(e) {
+  if (e.target.id === 'settings-modal-overlay') closeSettingsModalDirect();
+}
+function closeSettingsModalDirect() {
+  document.getElementById('settings-modal-overlay').style.display = 'none';
+}
+
+function toggleCustomServerFields() {
+  const isEnabled = document.getElementById('custom-server-toggle').checked;
+  document.getElementById('custom-server-fields').style.display = isEnabled ? 'flex' : 'none';
+}
+
+function saveServerConfig() {
+  const enabled = document.getElementById('custom-server-toggle').checked;
+  const host = document.getElementById('custom-server-host').value.trim();
+  const port = document.getElementById('custom-server-port').value.trim();
+  const path = document.getElementById('custom-server-path').value.trim();
+  const secure = document.getElementById('custom-server-secure').checked;
+
+  const config = { enabled, host, port, path, secure };
+  localStorage.setItem(SERVER_CONFIG_KEY, JSON.stringify(config));
+  
+  closeSettingsModalDirect();
+  showToast('⚙️ Server config saved. Restarting...');
+  
+  if (peer) {
+    connections.forEach(c => {
+      clearInterval(c.heartbeatTimer);
+      c.close();
+    });
+    connections = [];
+    updatePeerCount();
+    updateChatsSidebar();
+    peer.destroy();
+  }
+  
+  setTimeout(() => {
+    initPeer();
+  }, 500);
 }
 
 /* ═══════════════════════════════════════════════════════════════
